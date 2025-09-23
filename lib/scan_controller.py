@@ -43,10 +43,13 @@ class ScanController:
             config.get("STEPPER", "pins", "DIR_PIN"),
             config.get("STEPPER", "pins", "STEP_PIN"),
             pins,
+            enable_pin=config.get("STEPPER", "pins", "ENABLE_PIN", default=None),
             delay=config.get("STEPPER", "STEP_DELAY"),
             step_angle=config.get("STEPPER", "STEP_ANGLE"),
             microsteps=config.get("STEPPER", "MICROSTEPS"),
             gear_ratio=config.get("STEPPER", "GEAR_RATIO"),
+            pwm_frequency=None,
+            use_pwm=True,
         )
 
     def _default_lidar_factory(self, config):  # pragma: no cover - hardware specific

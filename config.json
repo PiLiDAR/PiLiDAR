@@ -42,6 +42,7 @@
         "pins": {
             "DIR_PIN": 26,
             "STEP_PIN": 19,
+            "ENABLE_PIN": 17,
             "MS_PINS": [5, 6, 13]
         },
         "RELAY_PIN": 24,

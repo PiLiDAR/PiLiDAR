@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 from time import sleep
-from typing import Iterable
+from typing import Iterable, Optional
 
 # ---------------------------------------------------------------------------
 # GPIO fallback for non Raspberry Pi systems
@@ -42,6 +42,7 @@ except Exception:  # pragma: no cover - triggered on CI or development machines
 
         def __init__(self) -> None:
             self._pins = {}
+            self._pwms = {}
 
         def setwarnings(self, _: bool) -> None:
             pass
@@ -54,6 +55,31 @@ except Exception:  # pragma: no cover - triggered on CI or development machines
 
         def output(self, pin: int, state: bool) -> None:
             self._pins[pin] = state
+
+        class _MockPWM:
+            def __init__(self, pin: int, frequency: float) -> None:
+                self.pin = pin
+                self.frequency = frequency
+                self.duty_cycle = 0.0
+                self.running = False
+
+            def start(self, duty_cycle: float) -> None:
+                self.duty_cycle = duty_cycle
+                self.running = True
+
+            def ChangeFrequency(self, frequency: float) -> None:
+                self.frequency = frequency
+
+            def ChangeDutyCycle(self, duty_cycle: float) -> None:
+                self.duty_cycle = duty_cycle
+
+            def stop(self) -> None:
+                self.running = False
+
+        def PWM(self, pin: int, frequency: float):
+            pwm = self._MockPWM(pin, frequency)
+            self._pwms[pin] = pwm
+            return pwm
 
         def cleanup(self, pins: Iterable[int] | int | None = None) -> None:
             if pins is None:
@@ -89,6 +115,9 @@ class A4988:
         step_angle: float = 1.8,
         microsteps: int = 16,
         gear_ratio: float = 1.0,
+        enable_pin: Optional[int] = None,
+        pwm_frequency: Optional[float] = None,
+        use_pwm: bool = False,
         verbose: bool = False,
     ) -> None:
 
@@ -104,12 +133,18 @@ class A4988:
         self.dir_pin = dir_pin
         self.step_pin = step_pin
         self.ms_pins = list(ms_pins)
+        self.enable_pin = enable_pin
 
         # Configure the GPIO pins as outputs.
         GPIO.setup(self.dir_pin, GPIO.OUT)
         GPIO.setup(self.step_pin, GPIO.OUT)
         for pin in self.ms_pins:
             GPIO.setup(pin, GPIO.OUT)
+        if self.enable_pin is not None:
+            GPIO.setup(self.enable_pin, GPIO.OUT)
+            # Enable-Pin ist low-aktiv.  Wir lassen den Treiber deaktiviert,
+            # bis tatsächlich Bewegungen anstehen.
+            GPIO.output(self.enable_pin, GPIO.HIGH)
 
         # Internal state that allows us to keep track of the absolute angle.
         self.current_steps = 0
@@ -119,6 +154,15 @@ class A4988:
         self.microsteps = microsteps
         self.gear_ratio = gear_ratio
         self.delay = delay
+        self._supports_pwm = hasattr(GPIO, "PWM")
+        self.use_pwm = bool(use_pwm and self._supports_pwm)
+        self._pwm: Optional[object] = None
+        # PWM-Frequenz: aus der eingestellten Verzögerung berechnet oder vom
+        # Aufrufer vorgegeben.  Ein Minimum von 1 Hz verhindert Division durch 0.
+        base_frequency = 1.0 / max(self.delay, 0.0001)
+        self.pwm_frequency = max(pwm_frequency or base_frequency, 1.0)
+        # sehr kurze Bewegungen arbeiten stabiler mit manuellen Einzelimpulsen
+        self._pwm_min_steps = 8
 
         # Microstepping allows very gentle motion because the driver performs
         # fractional steps.  The mapping below comes straight from the
@@ -134,6 +178,28 @@ class A4988:
         if self.microsteps in self.step_modes:
             for pin, state in zip(self.ms_pins, self.step_modes[self.microsteps]):
                 GPIO.output(pin, state)
+
+    # ------------------------------------------------------------------
+    # Helper functions for enable/PWM handling
+    # ------------------------------------------------------------------
+    def enable(self) -> None:
+        """Activate the stepper driver."""
+
+        if self.enable_pin is not None:
+            GPIO.output(self.enable_pin, GPIO.LOW)
+
+    def disable(self) -> None:
+        """Disable the stepper driver."""
+
+        if self.enable_pin is not None:
+            GPIO.output(self.enable_pin, GPIO.HIGH)
+
+    def _ensure_pwm(self):
+        if not self._supports_pwm:
+            raise RuntimeError("PWM support not available on this platform")
+        if self._pwm is None:
+            self._pwm = GPIO.PWM(self.step_pin, self.pwm_frequency)
+        return self._pwm
 
     def set_direction(self, direction: bool) -> None:
         """Set the turning direction of the motor shaft."""
@@ -159,6 +225,7 @@ class A4988:
         gearbox is engaged.
         """
 
+        self.enable()
         GPIO.output(self.step_pin, True)
         sleep(0.0001)
         GPIO.output(self.step_pin, False)
@@ -175,12 +242,14 @@ class A4988:
         direction = steps < 0
         steps = abs(int(steps))
 
-        self.set_direction(direction)
-        for _ in range(steps):
-            self.step()
+        if steps == 0:
+            return
 
-        # update current steps considering direction
-        self.current_steps += steps if not direction else -steps
+        self.set_direction(direction)
+        if self.use_pwm and self._supports_pwm and steps >= self._pwm_min_steps:
+            self._move_steps_pwm(steps, direction)
+        else:
+            self._move_steps_manual(steps, direction)
 
     def move_angle(self, angle: float) -> int:
         """Convenience wrapper that accepts a rotation in degrees."""
@@ -188,6 +257,30 @@ class A4988:
         steps = self.get_steps_for_angle(abs(angle))
         self.move_steps(steps if angle >= 0 else -steps)
         return steps
+
+    # ------------------------------------------------------------------
+    # internal movement helpers
+    # ------------------------------------------------------------------
+    def _move_steps_manual(self, steps: int, direction: bool) -> None:
+        self.enable()
+        for _ in range(steps):
+            self.step()
+        self.current_steps += steps if not direction else -steps
+
+    def _move_steps_pwm(self, steps: int, direction: bool) -> None:
+        self.enable()
+        pwm = self._ensure_pwm()
+        pwm.ChangeFrequency(self.pwm_frequency)
+        pwm.ChangeDutyCycle(50.0)
+        pwm.start(50.0)
+
+        # Ein PWM-Zyklus liefert genau einen Step-Impuls (Rising Edge).
+        duration = steps / self.pwm_frequency
+        sleep(duration)
+        pwm.stop()
+        GPIO.output(self.step_pin, False)
+
+        self.current_steps += steps if not direction else -steps
 
     def move_to_angle(self, target_angle: float, mod: bool = True) -> None:
         """Rotate the platform to an absolute target angle.
@@ -222,9 +315,19 @@ class A4988:
     def close(self) -> None:
         """Release the GPIO pins."""
 
+        if self._pwm is not None:
+            try:
+                self._pwm.stop()
+            except AttributeError:
+                pass
+            self._pwm = None
+
+        self.disable()
         GPIO.cleanup(self.ms_pins)
         GPIO.cleanup(self.dir_pin)
         GPIO.cleanup(self.step_pin)
+        if self.enable_pin is not None:
+            GPIO.cleanup(self.enable_pin)
 
 
 if __name__ == "__main__":
@@ -240,13 +343,15 @@ if __name__ == "__main__":
     scan_delay = config.get("STEPPER", "SCAN_DELAY")  # 1 / (SAMPLING_RATE * TARGET_RES / 360)
     
     # initialize stepper
-    stepper = A4988(config.get("STEPPER", "pins", "DIR_PIN"), 
-                    config.get("STEPPER", "pins", "STEP_PIN"), 
-                    config.get("STEPPER", "pins", "MS_PINS"), 
+    stepper = A4988(config.get("STEPPER", "pins", "DIR_PIN"),
+                    config.get("STEPPER", "pins", "STEP_PIN"),
+                    config.get("STEPPER", "pins", "MS_PINS"),
                     delay      = config.get("STEPPER", "STEP_DELAY"),  # 0.001
                     step_angle = config.get("STEPPER", "STEP_ANGLE"),  # 360 / STEPPER_RES
                     microsteps = config.get("STEPPER", "MICROSTEPS"),  # 16
-                    gear_ratio = config.get("STEPPER", "GEAR_RATIO"))  # 1 + 38/14 
+                    gear_ratio = config.get("STEPPER", "GEAR_RATIO"),
+                    enable_pin = config.get("STEPPER", "pins", "ENABLE_PIN", default=None),
+                    use_pwm    = True)  # demonstriert den PWM-Betrieb
 
 
     # # TEST: MOVE FULL 360° FORWARD AND BACKWARD

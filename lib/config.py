@@ -63,12 +63,13 @@ class Config:
         self.platform = get_platform()
         self.GPIO = GPIO
         self.set_device(self.get("LIDAR", "DEVICE"))
-        
-        
+
+
         # STEPPER
         self.STEPPER_RES = self.get("STEPPER", "STEPPER_RES")
         self.MICROSTEPS = self.get("STEPPER", "MICROSTEPS")
         self.SCAN_ANGLE = self.get("STEPPER", "SCAN_ANGLE")
+        self.stepper_enable_pin = self.get("STEPPER", "pins", "ENABLE_PIN", default=None)
 
         step_angle = 360 / self.get("STEPPER", "STEPPER_RES")
         self.set(step_angle, "STEPPER", "STEP_ANGLE")
@@ -229,6 +230,11 @@ class Config:
         self.relay_pin = self.get("STEPPER", "RELAY_PIN")
         self.GPIO.setup(self.relay_pin, self.GPIO.OUT)
         self.GPIO.output(self.relay_pin, self.GPIO.HIGH)  # enable power
+
+        if self.stepper_enable_pin is not None:
+            self.GPIO.setup(self.stepper_enable_pin, self.GPIO.OUT)
+            # High = deaktiviert → verhindert unkontrolliertes Anlaufen beim Booten
+            self.GPIO.output(self.stepper_enable_pin, self.GPIO.HIGH)
 
         if self.lidar_power_pin is not None:
             self.GPIO.setup(self.lidar_power_pin, self.GPIO.OUT)
