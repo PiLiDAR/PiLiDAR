@@ -2,11 +2,6 @@ import os
 
 import pytest
 
-try:
-    import open3d  # noqa: F401
-except OSError as exc:  # pragma: no cover - environment without OpenGL
-    pytest.skip(f"Open3D nicht verfügbar: {exc}", allow_module_level=True)
-
 from lib.config import Config
 from lib.lidar_driver import Lidar
 

@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.2, pytest-8.4.2, pluggy-1.6.0 -- /home/pi/PiLIDAR-Pi5/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/pi/PiLIDAR-Pi5
+configfile: pytest.ini
+plugins: dash-3.2.0, anyio-4.11.0
+collecting ... collected 2 items
+
+tests/test_config.py::test_config_creates_scan_directories PASSED        [ 50%]
+tests/test_lidar_driver.py::test_lidar_collects_full_package PASSED      [100%]
+
+============================== 2 passed in 1.23s ===============================
+error code=22,	release->address=0x7fff8947f000

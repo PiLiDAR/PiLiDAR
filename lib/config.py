@@ -62,6 +62,9 @@ class Config:
 
         self.platform = get_platform()
         self.GPIO = GPIO
+        # ``gpio_setup`` runs as part of ``set_device`` on real hardware, so
+        # ensure GPIO-related attributes exist beforehand.
+        self.stepper_enable_pin = self.get("STEPPER", "pins", "ENABLE_PIN", default=None)
         self.set_device(self.get("LIDAR", "DEVICE"))
 
 
@@ -69,7 +72,6 @@ class Config:
         self.STEPPER_RES = self.get("STEPPER", "STEPPER_RES")
         self.MICROSTEPS = self.get("STEPPER", "MICROSTEPS")
         self.SCAN_ANGLE = self.get("STEPPER", "SCAN_ANGLE")
-        self.stepper_enable_pin = self.get("STEPPER", "pins", "ENABLE_PIN", default=None)
 
         step_angle = 360 / self.get("STEPPER", "STEPPER_RES")
         self.set(step_angle, "STEPPER", "STEP_ANGLE")

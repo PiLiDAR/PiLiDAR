@@ -1,0 +1,78 @@
+GNU gdb (Debian 13.1-3) 13.1
+Copyright (C) 2023 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+Type "show copying" and "show warranty" for details.
+This GDB was configured as "aarch64-linux-gnu".
+Type "show configuration" for configuration details.
+For bug reporting instructions, please see:
+<https://www.gnu.org/software/gdb/bugs/>.
+Find the GDB manual and other documentation resources online at:
+    <http://www.gnu.org/software/gdb/documentation/>.
+
+For help, type "help".
+Type "apropos word" to search for commands related to "word"...
+Reading symbols from python...
+(No debugging symbols found in python)
+Starting program: /home/pi/PiLIDAR-Pi5/.venv/bin/python test/open3d_crash.py
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/aarch64-linux-gnu/libthread_db.so.1".
+[Detaching after vfork from child process 38915]
+[Detaching after vfork from child process 38916]
+[Detaching after vfork from child process 38919]
+[Detaching after vfork from child process 38920]
+[Detaching after vfork from child process 38921]
+[Detaching after vfork from child process 38924]
+[New Thread 0x7ffff3c0f180 (LWP 38925)]
+[New Thread 0x7ffff33ff180 (LWP 38926)]
+[New Thread 0x7ffff2bef180 (LWP 38927)]
+[New Thread 0x7fffeb17f180 (LWP 38930)]
+[New Thread 0x7fffea96f180 (LWP 38931)]
+[New Thread 0x7fffddc0f180 (LWP 38932)]
+[New Thread 0x7fffdd3ff180 (LWP 38933)]
+[New Thread 0x7fffdcbef180 (LWP 38934)]
+[New Thread 0x7fffdc3df180 (LWP 38935)]
+
+Thread 1 "python" received signal SIGSEGV, Segmentation fault.
+0x0000000000000000 in ?? ()
+#0  0x0000000000000000 in ?? ()
+#1  0x00007ffff481f524 in ?? ()
+   from /home/pi/PiLIDAR-Pi5/.venv/lib/python3.11/site-packages/open3d/cpu/pybind.cpython-311-aarch64-linux-gnu.so
+#2  0x00007ffff481fe50 in ?? ()
+   from /home/pi/PiLIDAR-Pi5/.venv/lib/python3.11/site-packages/open3d/cpu/pybind.cpython-311-aarch64-linux-gnu.so
+#3  0x00007ffff49c09c8 in ?? ()
+   from /home/pi/PiLIDAR-Pi5/.venv/lib/python3.11/site-packages/open3d/cpu/pybind.cpython-311-aarch64-linux-gnu.so
+#4  0x00007ffff47a30d4 in ?? ()
+   from /home/pi/PiLIDAR-Pi5/.venv/lib/python3.11/site-packages/open3d/cpu/pybind.cpython-311-aarch64-linux-gnu.so
+#5  0x00000000004c9aac in ?? ()
+#6  0x00000000004946f8 in _PyObject_MakeTpCall ()
+#7  0x0000000000511568 in ?? ()
+#8  0x00000000004eddbc in ?? ()
+#9  0x0000000000494b78 in ?? ()
+#10 0x00007ffff4784d58 in ?? ()
+   from /home/pi/PiLIDAR-Pi5/.venv/lib/python3.11/site-packages/open3d/cpu/pybind.cpython-311-aarch64-linux-gnu.so
+#11 0x00000000004946f8 in _PyObject_MakeTpCall ()
+#12 0x00000000004aa3f0 in _PyEval_EvalFrameDefault ()
+#13 0x00000000004a0c80 in PyEval_EvalCode ()
+#14 0x00000000005f9758 in ?? ()
+#15 0x00000000005f6450 in ?? ()
+#16 0x0000000000606e70 in ?? ()
+#17 0x0000000000606a18 in _PyRun_SimpleFileObject ()
+#18 0x0000000000606780 in _PyRun_AnyFileObject ()
+#19 0x0000000000604a0c in Py_RunMain ()
+#20 0x00000000005ce814 in Py_BytesMain ()
+#21 0x00007ffff7cd7744 in __libc_start_call_main (
+    main=main@entry=0x5ce6b4 <_start+52>, argc=argc@entry=2, 
+    argv=argv@entry=0x7ffffffff708)
+    at ../sysdeps/nptl/libc_start_call_main.h:58
+#22 0x00007ffff7cd7818 in __libc_start_main_impl (main=0x5ce6b4 <_start+52>, 
+    argc=2, argv=0x7ffffffff708, init=<optimized out>, fini=<optimized out>, 
+    rtld_fini=<optimized out>, stack_end=<optimized out>)
+    at ../csu/libc-start.c:360
+#23 0x00000000005ce6b0 in _start ()
+A debugging session is active.
+
+	Inferior 1 [process 38913] will be killed.
+
+Quit anyway? (y or n) [answered Y; input not from terminal]

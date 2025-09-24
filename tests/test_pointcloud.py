@@ -1,13 +1,7 @@
 import numpy as np
-import pytest
-
-try:
-    import open3d as o3d
-except OSError as exc:  # pragma: no cover - environment without OpenGL
-    pytest.skip(f"Open3D nicht verfügbar: {exc}", allow_module_level=True)
 
 from lib.config import Config
-from lib.pointcloud import get_scan_dict, process_raw, save_raw_scan
+from lib.pointcloud import PointCloudData, get_scan_dict, process_raw, save_raw_scan
 
 
 def test_process_raw_returns_intensity_pointcloud(tmp_path):
@@ -32,7 +26,9 @@ def test_process_raw_returns_intensity_pointcloud(tmp_path):
 
     result = process_raw(config, save=False)
 
-    assert isinstance(result["intensity"], o3d.geometry.PointCloud)
-    assert len(result["intensity"].points) > 0
-    assert np.asarray(result["intensity"].colors).shape[0] == len(result["intensity"].points)
+    intensity = result["intensity"]
+    assert isinstance(intensity, PointCloudData)
+    assert len(intensity) > 0
+    assert intensity.colors is not None
+    assert intensity.colors.shape[0] == len(intensity)
     assert result["vertex"] is None

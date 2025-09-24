@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.2, pytest-8.4.2, pluggy-1.6.0 -- /home/pi/PiLIDAR-Pi5/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/pi/PiLIDAR-Pi5
+configfile: pytest.ini
+plugins: dash-3.2.0, anyio-4.11.0
+collecting ... collected 3 items
+
+tests/test_config.py::test_config_creates_scan_directories PASSED        [ 33%]
+tests/test_lidar_driver.py::test_lidar_collects_full_package PASSED      [ 66%]
+tests/test_pointcloud.py::test_process_raw_returns_intensity_pointcloud PASSED [100%]
+
+============================== 3 passed in 2.20s ===============================
