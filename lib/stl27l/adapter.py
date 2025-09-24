@@ -36,8 +36,7 @@ class STL27LAdapter:
         device = getattr(self.cfg, "DEVICE", None) or self.cfg.get("LIDAR", "DEVICE")
         offset_deg = self.cfg.get("LIDAR", device, "OFFSET", default=0.0)
         self._offset_rad = np.deg2rad(offset_deg)
-        self._start_command: Optional[str] = getattr(self.cfg, "lidar_start_command", None)
-        self._stop_command: Optional[str] = getattr(self.cfg, "lidar_stop_command", None)
+        # Motor control is now handled by driver constants
 
         # Collected data buffers reset for every read_loop invocation
         self.package_history: List[Dict[str, Any]] = []
@@ -67,31 +66,23 @@ class STL27LAdapter:
         if not ok:
             raise RuntimeError("LiDAR nicht erreichbar (keine Pakete)")
 
-        if self._start_command:
-            try:
-                self.driver.io.write_bytes(self._start_command.encode())
-                if self._status_cb:
-                    self._status_cb("LiDAR: Motorstart-Befehl gesendet.")
-            except Exception as exc:  # pragma: no cover - serial availability
-                if self._status_cb:
-                    self._status_cb(f"LiDAR: Motorstart-Befehl fehlgeschlagen ({exc}).")
+        try:
+            self.driver.motor_start()
+            if self._status_cb:
+                self._status_cb("LiDAR: Motorstart-Befehl gesendet.")
+        except Exception as exc:  # pragma: no cover - serial availability
+            if self._status_cb:
+                self._status_cb(f"LiDAR: Motorstart-Befehl fehlgeschlagen ({exc}).")
 
     def stop_motor(self) -> None:
         # Send UART motor stop command
-        if self._stop_command:
-            try:
-                self.driver.io.write_bytes(self._stop_command.encode())
-                if self._status_cb:
-                    self._status_cb("LiDAR: Motorstop-Befehl gesendet.")
-            except Exception as exc:  # pragma: no cover - serial availability
-                if self._status_cb:
-                    self._status_cb(f"LiDAR: Motorstop-Befehl fehlgeschlagen ({exc}).")
-        
-        # Also send motor stop via driver method
         try:
             self.driver.motor_stop()
-        except Exception:
-            pass
+            if self._status_cb:
+                self._status_cb("LiDAR: Motorstop-Befehl gesendet.")
+        except Exception as exc:  # pragma: no cover - serial availability
+            if self._status_cb:
+                self._status_cb(f"LiDAR: Motorstop-Befehl fehlgeschlagen ({exc}).")
         
         # Set GPIO pin 17 to HIGH to disable stepper motor
         self._force_pin17_high()
@@ -235,7 +226,16 @@ class STL27LAdapter:
     ) -> None:
         angles_rad, distances_mm, intensities, timestamps_ns, cartesian, angular = packet_data
 
-        speed_deg_s = self.driver.get_spin_deg_per_s()
+        # Robuste Geschwindigkeitsabfrage mit Fehlerbehandlung
+        try:
+            speed_deg_s = self.driver.get_spin_deg_per_s()
+            if speed_deg_s <= 0 or speed_deg_s > 3600:  # Plausibilitätsprüfung
+                speed_deg_s = 600.0  # Fallback für STL27L
+        except Exception as exc:
+            speed_deg_s = 600.0  # Sicherer Fallback
+            if self._status_cb:
+                self._status_cb(f"LiDAR: Geschwindigkeitsabfrage fehlgeschlagen, verwende Fallback ({exc})")
+        
         timestamp_s = float(timestamps_ns[-1]) / 1e9
 
         packet_entry = {

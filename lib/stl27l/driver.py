@@ -6,6 +6,7 @@ from .protocol import LiPkgParser
 
 class STL27LDriver:
     """Lightweight high-level driver (SDK-like API)."""
+    
     def __init__(self, port="/dev/ttyUSB0", baud=921600):
         self.port = port
         self.baud = baud
@@ -53,7 +54,34 @@ class STL27LDriver:
         return self.parser.spin_deg_per_s / 360.0
 
     def get_spin_deg_per_s(self) -> float:
+        """Get motor spin speed in degrees per second."""
+        try:
+            if hasattr(self.parser, 'spin_deg_per_s') and self.parser.spin_deg_per_s is not None:
+                speed = float(self.parser.spin_deg_per_s)
+                # Plausibilitätsprüfung: STL27L läuft normalerweise zwischen 300-1800°/s
+                if 0 < speed <= 3600:
+                    return speed
+            # Fallback: Berechne aus get_spin_hz() falls verfügbar
+            if hasattr(self.parser, 'spin_hz') and self.parser.spin_hz is not None:
+                return float(self.parser.spin_hz * 360.0)
+            # Standard STL27L Geschwindigkeit als Fallback (10 Hz = 600°/s)
+            return 600.0
+        except (AttributeError, TypeError, ValueError):
+            return 600.0  # Sicherer Fallback-Wert für STL27L
+
+    def get_motor_speed(self) -> float:
+        """Get motor speed in Hz."""
         return float(self.parser.spin_deg_per_s)
+    
+    def _send_command(self, command: int) -> bool:
+        """Send command to LiDAR using SDK-compatible protocol."""
+        try:
+            cmd_byte = bytes([command])
+            self.io.write_bytes(cmd_byte)
+            return True
+        except Exception as e:
+            print(f"Failed to send command 0x{command:02X}: {e}")
+            return False
 
     def stop(self):
         self.io.close()
@@ -61,15 +89,18 @@ class STL27LDriver:
 
     # Placeholders for vendor motor commands (if supported by your unit):
     def motor_start(self):
-        """Send vendor-specific UART command to start motor (if available)."""
-        # Example (pseudo): self.io._ser.write(b"...")
-        pass
+        """Start the LiDAR motor (according to official SDK, motor starts automatically with driver start)."""
+        if not self._running:
+            print("Driver not running - motor cannot start")
+            return False
+        # According to official SDK: Motor starts automatically when driver starts
+        # No explicit motor start command is needed for STL27L
+        print("STL27L motor starts automatically with driver - no explicit command needed")
+        return True
 
     def motor_stop(self):
-        """Send vendor-specific UART command to stop motor (if available)."""
-        try:
-            if hasattr(self.io, '_ser') and self.io._ser and self.io._ser.is_open:
-                self.io._ser.write(b"0")  # Send motor stop command
-                self.io._ser.flush()
-        except Exception:
-            pass  # Ignore errors during shutdown
+        """Stop the LiDAR motor (according to official SDK, motor stops when driver stops)."""
+        # According to official SDK: Motor stops automatically when driver stops
+        # No explicit motor stop command exists for STL27L
+        print("STL27L motor stops automatically when driver stops - stopping driver...")
+        return self.stop()
