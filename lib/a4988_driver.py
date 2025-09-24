@@ -15,6 +15,7 @@ beginners understand what would happen on the real hardware.
 from __future__ import annotations
 
 import os
+import time
 from time import sleep
 from typing import Iterable, Optional
 
@@ -163,6 +164,13 @@ class A4988:
         self.pwm_frequency = max(pwm_frequency or base_frequency, 1.0)
         # sehr kurze Bewegungen arbeiten stabiler mit manuellen Einzelimpulsen
         self._pwm_min_steps = 8
+        self._continuous_state = {
+            "active": False,
+            "direction_sign": 1.0,
+            "steps_per_second": 0.0,
+            "start_time": 0.0,
+            "base_steps": 0.0,
+        }
 
         # Microstepping allows very gentle motion because the driver performs
         # fractional steps.  The mapping below comes straight from the
@@ -245,6 +253,7 @@ class A4988:
         if steps == 0:
             return
 
+        self.stop_continuous()
         self.set_direction(direction)
         if self.use_pwm and self._supports_pwm and steps >= self._pwm_min_steps:
             self._move_steps_pwm(steps, direction)
@@ -306,7 +315,8 @@ class A4988:
     def get_current_angle(self, mod: bool = True) -> float:
         """Return the current angle of the scanner platform."""
 
-        current_angle = self.current_steps / (self.microsteps * self.gear_ratio) * self.step_angle
+        steps = self._virtual_steps()
+        current_angle = steps / (self.microsteps * self.gear_ratio) * self.step_angle
 
         if mod:
             current_angle %= 360
@@ -315,6 +325,7 @@ class A4988:
     def close(self) -> None:
         """Release the GPIO pins."""
 
+        self.stop_continuous()
         if self._pwm is not None:
             try:
                 self._pwm.stop()
@@ -328,6 +339,70 @@ class A4988:
         GPIO.cleanup(self.step_pin)
         if self.enable_pin is not None:
             GPIO.cleanup(self.enable_pin)
+
+    # ------------------------------------------------------------------
+    # continuous rotation helpers
+    # ------------------------------------------------------------------
+    def _virtual_steps(self) -> float:
+        state = self._continuous_state
+        steps = float(self.current_steps)
+        if state["active"]:
+            elapsed = time.monotonic() - state["start_time"]
+            steps = state["base_steps"] + state["direction_sign"] * state["steps_per_second"] * elapsed
+        return steps
+
+    def start_continuous(self, steps_per_second: float, direction: bool = False) -> None:
+        """Rotate the motor smoothly using PWM at the desired microstep rate."""
+
+        if not self.use_pwm or not self._supports_pwm:
+            raise RuntimeError("Continuous rotation requires PWM support")
+        if steps_per_second <= 0:
+            raise ValueError("steps_per_second must be positive")
+
+        self.stop_continuous()
+        self.enable()
+        self.set_direction(direction)
+
+        base_steps = self._virtual_steps()
+        pwm = self._ensure_pwm()
+        frequency = max(float(steps_per_second), 1.0)
+        pwm.ChangeFrequency(frequency)
+        pwm.ChangeDutyCycle(50.0)
+        pwm.start(50.0)
+
+        sign = -1.0 if direction else 1.0
+        self._continuous_state = {
+            "active": True,
+            "direction_sign": sign,
+            "steps_per_second": float(steps_per_second),
+            "start_time": time.monotonic(),
+            "base_steps": base_steps,
+        }
+
+    def stop_continuous(self) -> None:
+        """Stop a running continuous rotation and sync the internal position."""
+
+        state = self._continuous_state
+        if not state["active"]:
+            return
+
+        steps = self._virtual_steps()
+        pwm = self._pwm
+        if pwm is not None:
+            try:
+                pwm.stop()
+            except AttributeError:
+                pass
+        GPIO.output(self.step_pin, False)
+
+        self.current_steps = int(round(steps))
+        self._continuous_state = {
+            "active": False,
+            "direction_sign": 1.0,
+            "steps_per_second": 0.0,
+            "start_time": 0.0,
+            "base_steps": float(self.current_steps),
+        }
 
 
 if __name__ == "__main__":

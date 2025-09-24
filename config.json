@@ -50,8 +50,8 @@
             "SCAN_ANGLE": "Vertikaler Drehbereich des Aufbaus in Grad.",
             "GEAR_RATIO": "Mathematische Formel für das Getriebeverhältnis zwischen Motor und Plattform.",
             "MICROSTEPS": "Mikroschritte pro Vollschritt (1, 2, 4, 8 oder 16). Höhere Werte = feinere Bewegung.",
-            "STEP_DELAY": "Wartezeit in Sekunden zwischen zwei Schrittimpulsen. Geringere Werte lassen den Motor schneller drehen.",
-            "SCAN_DELAY": "Pause in Sekunden nach jedem horizontalen Schritt, damit der LiDAR Zeit zum Messen hat.",
+        "STEP_DELAY": "Wartezeit in Sekunden zwischen zwei Schrittimpulsen. Im PWM-Standardbetrieb nur als Fallback ohne PWM relevant.",
+        "SCAN_DELAY": "Pause in Sekunden nach jedem horizontalen Schritt. Bei aktivem PWM-Betrieb nur als Fallback ohne PWM relevant.",
             "STEPPER_RES": "Wie viele Vollschritte der Motor pro Umdrehung hat (Standard: 200 bei NEMA17).",
             "STEP_ANGLE": "Wird automatisch berechnet. null bedeutet: Bitte nicht manuell eintragen."
         },
@@ -178,7 +178,7 @@
         "GEAR_RATIO": "1 + 38/14",
         "MICROSTEPS": 16,
         "STEP_DELAY": 0.0005,
-        "SCAN_DELAY": 0.001,
+        "SCAN_DELAY": 0.008,
         "STEPPER_RES": 200,
         "STEP_ANGLE": null
     },

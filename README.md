@@ -209,8 +209,9 @@ Arbeitsschritt nachvollziehen.
 
 - **Stepper & Getriebe**: Der Motor läuft mit 16-fach Mikrostepping.  Die
   Schrittimpulse werden als 50 % PWM über den STEP-Pin erzeugt.  Die Frequenz
-  ergibt sich aus `STEP_DELAY` in der `config.json` und sorgt für einen sehr
-  gleichmäßigen Lauf des getriebeübersetzten Motors.
+  ergibt sich aus `TARGET_SPEED` × der unter „Horizontale Auflösung“ hinterlegten
+  Mikroschrittzahl. Während des LiDAR-Scans läuft der Motor jetzt kontinuierlich
+  per PWM – keine ruckartigen Start/Stop-Bewegungen mehr.
 - **Enable-Pin**: Der A4988 ist standardmäßig deaktiviert (Enable = High).  Die
   Software zieht den Pin bei Bedarf auf Low und gibt den Motor nach dem Scan
   sofort wieder frei – so bleibt er handwarm und sicher.

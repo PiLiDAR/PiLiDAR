@@ -208,26 +208,84 @@ class ScanController:
                 self.stepper.move_to_angle((360 / IMGCOUNT) * (i + 1))
                 time.sleep(0.5)
 
+        if self.stepper is not None and self.lidar is not None:
+            self.lidar.z_angle = self.stepper.get_current_angle(mod=False)
+
         if self.stepper is not None:
             self.stepper.move_to_angle(0)
             time.sleep(0.5)
 
     def _capture_lidar(self):
         scan_delay = self.config.get("STEPPER", "SCAN_DELAY")
+        supports_continuous = (
+            self.stepper is not None
+            and getattr(self.stepper, "use_pwm", False)
+            and self.config.get("STEPPER", "SCAN_ANGLE") != 0
+            and self.config.steps > 0
+        )
 
-        def move_steps_callback():
-            if self._stop_event.is_set():
-                self.lidar.request_stop()
-                return
-            if self.stepper is None:
-                return
-            steps = self.config.steps if self.config.SCAN_ANGLE > 0 else -self.config.steps
-            self.stepper.move_steps(steps)
-            self.lidar.z_angle = self.stepper.get_current_angle()
-            time.sleep(scan_delay)
+        if supports_continuous:
+            direction_negative = self.config.SCAN_ANGLE < 0
+            total_rotation = abs(self.config.SCAN_ANGLE)
+            steps_per_second = abs(self.config.steps * self.config.TARGET_SPEED)
+            stepper_active = False
+            rotation_done = False
+            start_angle = self.stepper.get_current_angle(mod=False)
+            self.lidar.z_angle = start_angle
 
-        self._notify("Starte LiDAR-Aufnahme...")
-        self.lidar.read_loop(callback=move_steps_callback, max_packages=self.config.max_packages)
+            if steps_per_second > 0 and total_rotation > 0:
+                self.stepper.start_continuous(steps_per_second, direction=direction_negative)
+                stepper_active = True
+
+            def update_angle_callback():
+                nonlocal stepper_active, rotation_done
+                if self._stop_event.is_set():
+                    if stepper_active:
+                        self.stepper.stop_continuous()
+                        stepper_active = False
+                    self.lidar.request_stop()
+                    return
+
+                if stepper_active:
+                    current_angle = self.stepper.get_current_angle(mod=False)
+                    self.lidar.z_angle = current_angle
+
+                    rotated = (
+                        start_angle - current_angle
+                        if direction_negative
+                        else current_angle - start_angle
+                    )
+
+                    if rotated >= total_rotation:
+                        rotation_done = True
+                        self.stepper.stop_continuous()
+                        stepper_active = False
+                        self.lidar.request_stop()
+                else:
+                    if self.stepper is not None:
+                        self.lidar.z_angle = self.stepper.get_current_angle(mod=False)
+
+            self._notify("Starte LiDAR-Aufnahme...")
+            self.lidar.read_loop(callback=update_angle_callback, max_packages=self.config.max_packages)
+
+            if stepper_active:
+                self.stepper.stop_continuous()
+            if self.stepper is not None and total_rotation == 0:
+                self.lidar.z_angle = self.stepper.get_current_angle(mod=False)
+        else:
+            def move_steps_callback():
+                if self._stop_event.is_set():
+                    self.lidar.request_stop()
+                    return
+                if self.stepper is None:
+                    return
+                steps = self.config.steps if self.config.SCAN_ANGLE > 0 else -self.config.steps
+                self.stepper.move_steps(steps)
+                self.lidar.z_angle = self.stepper.get_current_angle()
+                time.sleep(scan_delay)
+
+            self._notify("Starte LiDAR-Aufnahme...")
+            self.lidar.read_loop(callback=move_steps_callback, max_packages=self.config.max_packages)
 
         if self.stepper is not None:
             self.stepper.move_to_angle(0)
