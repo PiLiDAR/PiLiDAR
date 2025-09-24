@@ -260,24 +260,55 @@ def colormap_pcd_open3d(
     cmap: str = "viridis",
     gamma: float = 2.2,
 ) -> "o3d.geometry.PointCloud":
+    """
+    Colorize point cloud using matplotlib colormap based on LiDAR intensity values.
+    Based on original PiLiDAR implementation from https://github.com/PiLiDAR/PiLiDAR
+    """
     _require_open3d()
     result = o3d.geometry.PointCloud(pcd)
+    
+    # Determine intensity channel source
     if intensities is not None:
+        # Use provided intensities (raw LiDAR intensity values)
         channel = np.asarray(intensities, dtype=np.float64)
+        
+        # Filter out invalid/extreme values (NaN, inf, extreme outliers)
+        valid_mask = np.isfinite(channel)
+        if np.any(~valid_mask):
+            print(f"Warnung: {np.sum(~valid_mask)} ungültige Intensitätswerte gefiltert")
+            
+        # Use percentile-based filtering for robustness
+        if np.sum(valid_mask) > 0:
+            p1, p99 = np.percentile(channel[valid_mask], [1, 99])
+            # Clamp extreme values to percentile range
+            channel = np.clip(channel, p1, p99)
+            channel[~valid_mask] = p1  # Set invalid values to minimum
+        else:
+            # All values invalid, use default
+            channel = np.zeros_like(channel)
+            
     elif len(result.colors) > 0:
+        # Use red channel from existing colors (assuming grayscale intensity)
         channel = np.asarray(result.colors, dtype=np.float64)[:, 0]
     else:
+        # No intensity data available
         channel = np.zeros(len(result.points), dtype=np.float64)
 
     if channel.size == 0:
         return result
 
-    channel = channel - channel.min()
-    if channel.max() > 0:
-        channel /= channel.max()
+    # Robust normalization to [0, 1] range
+    if channel.max() > channel.min():
+        channel = (channel - channel.min()) / (channel.max() - channel.min())
+    else:
+        # All values are the same, set to middle range
+        channel = np.full_like(channel, 0.5)
+    
+    # Apply gamma correction for better visual contrast
     if gamma != 1:
-        channel = np.power(channel, gamma)
+        channel = np.power(np.clip(channel, 0, 1), gamma)
 
+    # Map normalized intensities to colormap (viridis, jet, hot, etc.)
     colors = matplotlib.colormaps[cmap](channel)[:, :3].astype(np.float64)
     result.colors = o3d.utility.Vector3dVector(colors)
     return result
@@ -303,12 +334,17 @@ def process_raw_open3d(
     )
 
     points = array_3d[:, :3]
-    intensities = array_3d[:, 3] / 255.0 if array_3d.shape[1] > 3 else None
+    # Keep raw intensity values (do NOT normalize by 255 yet - let colormap handle it)
+    intensities = array_3d[:, 3] if array_3d.shape[1] > 3 else None
 
     base = o3d.geometry.PointCloud()
     base.points = o3d.utility.Vector3dVector(points)
+    
+    # Store raw intensities as grayscale colors for compatibility
     if intensities is not None:
-        base.colors = o3d.utility.Vector3dVector(np.repeat(intensities[:, None], 3, axis=1))
+        # Normalize intensities to [0,1] for color storage, but preserve raw values for colormap
+        intensity_normalized = intensities / 255.0
+        base.colors = o3d.utility.Vector3dVector(np.repeat(intensity_normalized[:, None], 3, axis=1))
     else:
         base.colors = o3d.utility.Vector3dVector(np.zeros_like(points))
 
@@ -328,7 +364,8 @@ def process_raw_open3d(
     compression_flag = False
 
     base_cloud = o3d.geometry.PointCloud(base)
-    intensity_cloud = colormap_pcd_open3d(base_cloud, intensities=intensities, gamma=1, cmap="viridis")
+    # Use raw intensity values for colormap generation (NOT the normalized ones)
+    intensity_cloud = colormap_pcd_open3d(base_cloud, intensities=intensities, gamma=2.2, cmap="viridis")
     if save and len(intensity_cloud.points) > 0:
         save_open3d_pointcloud(intensity_cloud, _with_suffix(config.intensity_pcd_path, "_o3d"), ascii_flag, compression_flag)
 
@@ -607,21 +644,48 @@ def get_transform_vectors(transform_M: np.ndarray) -> Tuple[np.ndarray, np.ndarr
 
 
 def colormap_pcd(pcd: PointCloudData, cmap: str = "viridis", gamma: float = 2.2) -> PointCloudData:
+    """
+    Colorize point cloud using matplotlib colormap based on LiDAR intensity values.
+    Based on original PiLiDAR implementation from https://github.com/PiLiDAR/PiLiDAR
+    """
     if pcd.intensities is not None and len(pcd.intensities) > 0:
-        channel = pcd.intensities
+        # Use raw intensity values for better color mapping
+        channel = pcd.intensities.astype(np.float64)
+        
+        # Filter out invalid/extreme values (NaN, inf, extreme outliers)
+        valid_mask = np.isfinite(channel)
+        if np.any(~valid_mask):
+            print(f"Warnung: {np.sum(~valid_mask)} ungültige Intensitätswerte gefiltert")
+            
+        # Use percentile-based filtering for robustness
+        if np.sum(valid_mask) > 0:
+            p1, p99 = np.percentile(channel[valid_mask], [1, 99])
+            # Clamp extreme values to percentile range
+            channel = np.clip(channel, p1, p99)
+            channel[~valid_mask] = p1  # Set invalid values to minimum
+        else:
+            # All values invalid, use default
+            channel = np.zeros_like(channel)
+            
     elif pcd.colors is not None and len(pcd.colors) > 0:
-        channel = pcd.colors[:, 0]
+        # Use red channel from existing colors (assuming grayscale intensity)
+        channel = pcd.colors[:, 0].astype(np.float64)
     else:
-        channel = np.zeros(len(pcd))
+        # No intensity data available
+        channel = np.zeros(len(pcd), dtype=np.float64)
 
-    channel = channel.astype(np.float64)
-    channel -= channel.min()
-    if channel.max() > 0:
-        channel /= channel.max()
+    # Robust normalization to [0, 1] range
+    if len(channel) > 0 and channel.max() > channel.min():
+        channel = (channel - channel.min()) / (channel.max() - channel.min())
+    else:
+        # All values are the same or empty, set to middle range
+        channel = np.full_like(channel, 0.5)
 
+    # Apply gamma correction for better visual contrast
     if gamma != 1:
-        channel = np.power(channel, gamma)
+        channel = np.power(np.clip(channel, 0, 1), gamma)
 
+    # Map normalized intensities to colormap
     colors = matplotlib.colormaps[cmap](channel)[:, :3]
     return pcd.with_colors(colors)
 
