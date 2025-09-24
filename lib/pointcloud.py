@@ -166,27 +166,37 @@ def process_raw(config, save: bool = True) -> Dict[str, Optional[PointCloudData]
     if scene_scale != 1:
         base_cloud = transform(base_cloud, scale=scene_scale)
 
+    # Always compute the intensity-colored version (matching upstream fallback behaviour)
     intensity_cloud = colormap_pcd(base_cloud.copy(), gamma=1, cmap="viridis")
     if save:
-        save_pointcloud_threaded(intensity_cloud, config.intensity_pcd_path, ply_ascii=config.get("3D", "ASCII"))
+        save_pointcloud_threaded(
+            intensity_cloud,
+            config.intensity_pcd_path,
+            ply_ascii=config.get("3D", "ASCII"),
+        )
 
     vertex_cloud: Optional[PointCloudData] = None
-    if config.get("ENABLE_VERTEXCOLOUR") and os.path.exists(config.pano_path):
-        pano = cv2.imread(config.pano_path)
-        if pano is not None:
-            vertex_cloud = base_cloud.copy()
+    pano_path = config.pano_path
+    if config.get("ENABLE_VERTEXCOLOUR") and os.path.exists(pano_path):
+        pano = cv2.imread(pano_path)
+        if pano is None:
+            print("Warnung: Panorama konnte nicht geladen werden.")
+        else:
             colors = angular_lookup(
-                angular_from_cartesian(vertex_cloud.points),
+                angular_from_cartesian(base_cloud.points),
                 pano,
                 scale=config.get("VERTEXCOLOUR", "SCALE"),
                 z_rotate=config.get("VERTEXCOLOUR", "Z_ROTATE"),
+                as_float=True,
             )
-            vertex_cloud = vertex_cloud.with_colors(colors / 255.0)
+            vertex_cloud = base_cloud.with_colors(colors)
             if save:
-                save_pointcloud_threaded(vertex_cloud, config.vertex_pcd_path, ply_ascii=config.get("3D", "ASCII"))
-        else:
-            print("Warnung: Panorama konnte nicht geladen werden.")
-    else:
+                save_pointcloud_threaded(
+                    vertex_cloud,
+                    config.vertex_pcd_path,
+                    ply_ascii=config.get("3D", "ASCII"),
+                )
+    elif config.get("ENABLE_VERTEXCOLOUR"):
         print("Panorama-Färbung übersprungen (deaktiviert oder keine Bilddatei gefunden).")
 
     filtered_cloud: Optional[PointCloudData] = None

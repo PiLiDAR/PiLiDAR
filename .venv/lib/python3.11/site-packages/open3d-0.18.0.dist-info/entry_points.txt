@@ -1,0 +1,5 @@
+[console_scripts]
+open3d = open3d.tools.cli:main
+
+[tensorboard_plugins]
+Open3D = open3d.visualization.tensorboard_plugin.plugin:Open3DPlugin

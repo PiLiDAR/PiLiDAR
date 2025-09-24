@@ -1,0 +1,7 @@
+[console_scripts]
+dash-generate-components = dash.development.component_generator:cli
+dash-update-components = dash.development.update_components:cli
+renderer = dash.development.build_process:renderer
+
+[pytest11]
+dash = dash.testing.plugin

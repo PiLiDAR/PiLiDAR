@@ -21,9 +21,13 @@ class PiLiDARApp:
         self.scan_id_var = tk.StringVar()
         self.target_res_var = tk.StringVar(value=str(self.controller.config.target_res))
         self.scan_angle_var = tk.StringVar(value=str(self.controller.config.SCAN_ANGLE))
-        self.enable_cam_var = tk.BooleanVar(value=self.controller.config.get("ENABLE_CAM"))
-        self.enable_lidar_var = tk.BooleanVar(value=self.controller.config.get("ENABLE_LIDAR"))
-        self.enable_3d_var = tk.BooleanVar(value=self.controller.config.get("ENABLE_3D"))
+        cfg = self.controller.config
+        self.enable_lidar_var = tk.BooleanVar(value=cfg.get("ENABLE_LIDAR"))
+        self.enable_cam_var = tk.BooleanVar(value=cfg.get("ENABLE_CAM"))
+        self.enable_pano_var = tk.BooleanVar(value=cfg.get("ENABLE_PANO"))
+        self.enable_3d_var = tk.BooleanVar(value=cfg.get("ENABLE_3D"))
+        self.enable_vertex_var = tk.BooleanVar(value=cfg.get("ENABLE_VERTEXCOLOUR"))
+        self.enable_filter_var = tk.BooleanVar(value=cfg.get("ENABLE_FILTERING"))
 
         self.status_box = None
         self.start_button = None
@@ -49,12 +53,16 @@ class PiLiDARApp:
         ttk.Label(frame, text="Scanwinkel (°):").grid(row=2, column=0, sticky="w")
         ttk.Entry(frame, textvariable=self.scan_angle_var).grid(row=2, column=1, sticky="ew")
 
-        ttk.Checkbutton(frame, text="Kamera verwenden", variable=self.enable_cam_var).grid(row=3, column=0, sticky="w")
-        ttk.Checkbutton(frame, text="LiDAR verwenden", variable=self.enable_lidar_var).grid(row=3, column=1, sticky="w")
-        ttk.Checkbutton(frame, text="3D Punktwolke erzeugen", variable=self.enable_3d_var).grid(row=4, column=0, sticky="w")
+        ttk.Label(frame, text="Aktive Module:").grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        ttk.Checkbutton(frame, text="LiDAR aktivieren", variable=self.enable_lidar_var).grid(row=4, column=0, sticky="w")
+        ttk.Checkbutton(frame, text="Kamera aktivieren", variable=self.enable_cam_var).grid(row=4, column=1, sticky="w")
+        ttk.Checkbutton(frame, text="Panorama berechnen", variable=self.enable_pano_var).grid(row=5, column=0, sticky="w")
+        ttk.Checkbutton(frame, text="3D-Punktwolke speichern", variable=self.enable_3d_var).grid(row=5, column=1, sticky="w")
+        ttk.Checkbutton(frame, text="Punktwolke mit Foto-Farben", variable=self.enable_vertex_var).grid(row=6, column=0, sticky="w")
+        ttk.Checkbutton(frame, text="Rauschen filtern", variable=self.enable_filter_var).grid(row=6, column=1, sticky="w")
 
         button_frame = ttk.Frame(frame)
-        button_frame.grid(row=5, column=0, columnspan=2, pady=(10, 5))
+        button_frame.grid(row=7, column=0, columnspan=2, pady=(10, 5))
 
         self.start_button = ttk.Button(button_frame, text="Scan starten", command=self._start_scan)
         self.start_button.grid(row=0, column=0, padx=5)
@@ -62,13 +70,13 @@ class PiLiDARApp:
         self.stop_button = ttk.Button(button_frame, text="Scan stoppen", command=self._stop_scan, state=tk.DISABLED)
         self.stop_button.grid(row=0, column=1, padx=5)
 
-        ttk.Label(frame, text="Statusmeldungen:").grid(row=6, column=0, columnspan=2, sticky="w")
+        ttk.Label(frame, text="Statusmeldungen:").grid(row=8, column=0, columnspan=2, sticky="w")
 
         self.status_box = tk.Text(frame, height=12, state=tk.DISABLED)
-        self.status_box.grid(row=7, column=0, columnspan=2, sticky="nsew")
+        self.status_box.grid(row=9, column=0, columnspan=2, sticky="nsew")
 
         frame.columnconfigure(1, weight=1)
-        frame.rowconfigure(7, weight=1)
+        frame.rowconfigure(9, weight=1)
 
     # ------------------------------------------------------------------
     # event handlers
@@ -86,9 +94,13 @@ class PiLiDARApp:
         self.controller.config.set(target_res, "LIDAR", "TARGET_RES")
         self.controller.config.update_target_res(target_res)
 
-        self.controller.config.set(self.enable_cam_var.get(), "ENABLE_CAM")
-        self.controller.config.set(self.enable_lidar_var.get(), "ENABLE_LIDAR")
-        self.controller.config.set(self.enable_3d_var.get(), "ENABLE_3D")
+        cfg = self.controller.config
+        cfg.set(self.enable_lidar_var.get(), "ENABLE_LIDAR")
+        cfg.set(self.enable_cam_var.get(), "ENABLE_CAM")
+        cfg.set(self.enable_pano_var.get(), "ENABLE_PANO")
+        cfg.set(self.enable_3d_var.get(), "ENABLE_3D")
+        cfg.set(self.enable_vertex_var.get(), "ENABLE_VERTEXCOLOUR")
+        cfg.set(self.enable_filter_var.get(), "ENABLE_FILTERING")
 
         scan_id = self.scan_id_var.get().strip() or None
         self.controller.set_scan_id(scan_id)

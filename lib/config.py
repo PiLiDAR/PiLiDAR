@@ -244,12 +244,13 @@ class Config:
 
     def relay_on(self):
         if hasattr(self, "relay_pin") and self.has_gpio():
+            if self.GPIO.gpio_function(self.relay_pin) != self.GPIO.OUT:
+                self.GPIO.setup(self.relay_pin, self.GPIO.OUT)
             self.GPIO.output(self.relay_pin, self.GPIO.HIGH)
 
     def relay_off(self):
         if hasattr(self, "relay_pin") and self.has_gpio():
             self.GPIO.output(self.relay_pin, self.GPIO.LOW)
-            self.GPIO.cleanup(self.relay_pin)
 
     def lidar_power_on(self):
         if self.lidar_power_pin is not None and self.has_gpio():

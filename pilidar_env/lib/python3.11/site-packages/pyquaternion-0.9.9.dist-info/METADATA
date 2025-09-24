@@ -1,0 +1,33 @@
+Metadata-Version: 2.1
+Name: pyquaternion
+Version: 0.9.9
+Summary: A fully featured, pythonic library for representing and using quaternions.
+Home-page: http://kieranwynn.github.io/pyquaternion/
+Author: Kieran Wynn
+Author-email: KieranWynn@users.noreply.github.com
+License: MIT
+Download-URL: https://github.com/KieranWynn/pyquaternion/releases/latest
+Keywords: quaternion,math,maths,physics,orientation,pose,geometry,visualisation,animation
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Embedded Systems
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Scientific/Engineering :: Mathematics
+Classifier: Topic :: Scientific/Engineering :: Physics
+Classifier: Topic :: Scientific/Engineering :: Visualization
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Requires-Dist: numpy
+Provides-Extra: dev
+Requires-Dist: mkdocs ; extra == 'dev'
+Provides-Extra: test
+Requires-Dist: nose ; extra == 'test'
+
+A fully featured, pythonic library for quaternion representation, manipulation, 3D animation and geometry.
+
+

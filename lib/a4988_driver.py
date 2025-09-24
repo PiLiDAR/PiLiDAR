@@ -57,6 +57,9 @@ except Exception:  # pragma: no cover - triggered on CI or development machines
         def output(self, pin: int, state: bool) -> None:
             self._pins[pin] = state
 
+        def gpio_function(self, pin: int):
+            return self.OUT if pin in self._pins else None
+
         class _MockPWM:
             def __init__(self, pin: int, frequency: float) -> None:
                 self.pin = pin
