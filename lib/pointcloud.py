@@ -619,9 +619,10 @@ def save_pointcloud_threaded(
     thread = threading.Thread(
         target=save_pointcloud,
         args=(pcd, output_path, ply_ascii, ply_compression, csv_delimiter),
-        daemon=True,
+        daemon=False,
     )
     thread.start()
+    thread.join()
 
 
 # ----------------------------------------------------------------------------

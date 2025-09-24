@@ -25,6 +25,9 @@ BANNER = r"""
 def run_headless_scan() -> None:
     """Execute the full pipeline and print helpful hints."""
 
+    # Headless-Modus = Alles läuft automatisch ohne Benutzeroberfläche.
+    # Ideal, wenn der Scan per SSH oder beim Systemstart erfolgen soll.
+
     print(BANNER)
     print("Starte PiLiDAR im Headless-Modus...")
     config = Config()
@@ -51,6 +54,8 @@ def run_headless_scan() -> None:
 def launch_gui() -> None:
     """Launch the Tkinter based GUI."""
 
+    # GUI-Modus erklärt jeden Schritt, ideal für Einsteiger*innen am Pi mit Bildschirm.
+
     print(BANNER)
     print("Starte grafische Oberfläche...")
     config = Config()
@@ -62,8 +67,21 @@ def launch_gui() -> None:
 
 
 def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="PiLiDAR Steuerprogramm")
-    parser.add_argument("--gui", action="store_true", help="Starte die grafische Benutzeroberfläche")
+    """Interpret command-line switches such as ``--gui`` for non-technical users."""
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "PiLiDAR Steuerprogramm – ohne Angaben läuft ein Komplettscan im Hintergrund."  # noqa: E501
+        )
+    )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help=(
+            "Öffnet eine einfache Oberfläche mit Buttons und erklärt jeden Schritt. "
+            "Ohne --gui läuft der Scan vollautomatisch im Terminal."
+        ),
+    )
     return parser.parse_args(args=args)
 
 

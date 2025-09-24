@@ -151,8 +151,8 @@ class ScanController:
             if self.config.get("ENABLE_CAM") and self.config.get("ENABLE_PANO"):
                 pano_path = self._build_panorama()
 
-            pointclouds = {}
-            if self.config.get("ENABLE_3D") and (raw_scan or os.path.exists(self.config.raw_path)):
+            pointclouds: Dict[str, Optional[object]] = {}
+            if raw_scan is not None or os.path.exists(self.config.raw_path):
                 pointclouds = self._process_pointcloud()
 
             result = {

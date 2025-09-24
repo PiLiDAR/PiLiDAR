@@ -137,6 +137,34 @@ scans/<SCAN-ID>/
 Alle Dateien werden automatisch erzeugt und mit sprechenden Namen versehen.
 Eine manuelle Nacharbeit ist nicht notwendig.
 
+### 3.1 Schnellübersicht `config.json`
+
+Die Datei `config.json` steuert jeden Schritt. Die folgende Tabelle fasst die
+wichtigsten Schalter zusammen – ausführlichere Erklärungen stehen zusätzlich in
+der Datei selbst (Abschnitt `"DOCS"`).
+
+| Bereich | Parameter | Bedeutung für Einsteiger*innen |
+|---------|-----------|--------------------------------|
+| Basis | `ENABLE_LIDAR` | `true` = Laser misst Entfernungen, `false` = Scan ohne LiDAR (nur Kamera). |
+| Basis | `ENABLE_CAM` | `true` = Kamera macht Fotos, `false` = keine Bilder, keine Panorama-Färbung. |
+| Basis | `ENABLE_PANO` | Aktiviert das Zusammenfügen der Fotos zum Panorama. |
+| Basis | `ENABLE_3D` | Erstellt Punktwolken-Dateien, sobald LiDAR-Daten vorhanden sind. |
+| Basis | `ENABLE_VERTEXCOLOUR` | Legt eine zweite Punktwolke mit Bildfarben ab (Panorama nötig). |
+| Basis | `ENABLE_FILTERING` | Bereinigt die Punktwolke von Ausreißern – auf dem Pi spürbar langsamer. |
+| Ordner | `SCANS_ROOT` | Übergeordneter Ablageordner aller Scans. |
+| LiDAR | `TARGET_RES` | Schrittweite in Grad. Kleinere Werte = mehr Messungen. |
+| LiDAR | `TARGET_SPEED` | Geplante Drehgeschwindigkeit des Sensors. |
+| Stepper | `SCAN_ANGLE` | Vertikaler Drehbereich des Aufbaus. |
+| Stepper | `STEP_DELAY` | Pausenzeit zwischen den Motorimpulsen (Tempo des Motors). |
+| Kamera | `dims` | Auflösung der finalen Fotos. |
+| Panorama | `IMGCOUNT` | Anzahl der Fotos rundum. |
+| 3D | `SCALE` | Rechnet Millimeter in Meter um (Standard 0.001). |
+| 3D | `INTENSITY_SUFFIX` / `COLOR_SUFFIX` | Anhang für die Dateinamen der Punktwolken. |
+| Vertexfarben | `SCALE` | Skaliert das Panorama für schnellere Verarbeitung. |
+| Filtering | `VOXEL_SIZE` | Gröbere Einteilung der Punktwolke, bevor gefiltert wird. |
+| Mesh | `POISSON.depth` | Detailstufe beim späteren Flächenmodell. |
+| Registrierung | `GLOBAL.voxel_size` | Detailgrad beim Ausrichten mehrerer Scans. |
+
 ## 4. Welche LiDAR-Daten werden gespeichert?
 
 Der neue Treiber speichert den kompletten Informationsgehalt jeder Messung:
