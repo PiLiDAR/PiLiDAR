@@ -29,7 +29,12 @@ if platform == 'RaspberryPi':  # pragma: no cover - executed on the real device
 
 
 class Config:
-    def __init__(self, file_path: str = "config.json", scans_root: Optional[str] = None):
+    def __init__(
+        self,
+        file_path: str = "config.json",
+        scans_root: Optional[str] = None,
+        use_hardware: bool = True,
+    ):
         # ``base_dir`` is the project root directory.  All relative paths inside
         # ``config.json`` are resolved against it so that the code works no
         # matter from where it is launched.
@@ -62,6 +67,7 @@ class Config:
 
         self.platform = get_platform()
         self.GPIO = GPIO
+        self._hardware_enabled = bool(use_hardware)
         # ``gpio_setup`` runs as part of ``set_device`` on real hardware, so
         # ensure GPIO-related attributes exist beforehand.
         self.stepper_enable_pin = self.get("STEPPER", "pins", "ENABLE_PIN", default=None)
@@ -137,7 +143,7 @@ class Config:
         self.imglist = []
 
 
-    def set_device(self, device: str):
+    def set_device(self, device: str, *, use_hardware: Optional[bool] = None):
         '''set sampling rate, baudrate and port for selected device'''
         self.DEVICE = device
         self.TARGET_SPEED = self.get("LIDAR", "TARGET_SPEED")
@@ -150,13 +156,28 @@ class Config:
         self.lidar_start_command = self.get("LIDAR", "MOTOR_START_COMMAND", default="1")
         self.lidar_stop_command = self.get("LIDAR", "MOTOR_STOP_COMMAND", default="0")
 
-        if self.platform == 'RaspberryPi':
+        if use_hardware is not None:
+            self._hardware_enabled = bool(use_hardware)
+
+        hardware_active = (
+            self.platform == 'RaspberryPi'
+            and self._hardware_enabled
+            and self.has_gpio()
+        )
+
+        if hardware_active:
             print("Platform: Raspberry Pi")
 
-            # BUG legacy: allow access to serial port on Raspberry Pi
-            allow_serial()
+            try:
+                allow_serial()
+            except Exception as exc:  # pragma: no cover - permission errors
+                print(f"Warnung: Zugriff auf serielle Schnittstelle fehlgeschlagen ({exc})")
 
-            self.gpio_setup()  # enable GPIO Ports
+            try:
+                self.gpio_setup()  # enable GPIO Ports
+            except Exception as exc:  # pragma: no cover - permission errors
+                print(f"Warnung: GPIO-Initialisierung deaktiviert ({exc})")
+                self._hardware_enabled = False
 
             self.PORT = self.get("LIDAR", self.DEVICE , "PORT")
 
@@ -219,7 +240,7 @@ class Config:
             raise ValueError("STEPPER_RES must be positive")
 
     def has_gpio(self) -> bool:
-        return self.GPIO is not None
+        return self.GPIO is not None and self._hardware_enabled
 
     def gpio_setup(self, debug: bool = False):
         if not self.has_gpio():

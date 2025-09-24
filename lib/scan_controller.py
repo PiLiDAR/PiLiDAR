@@ -39,6 +39,7 @@ class ScanController:
         from lib.a4988_driver import A4988
 
         pins = config.get("STEPPER", "pins", "MS_PINS")
+        use_pwm = config.get("STEPPER", "USE_PWM", default=False)
         return A4988(
             config.get("STEPPER", "pins", "DIR_PIN"),
             config.get("STEPPER", "pins", "STEP_PIN"),
@@ -49,17 +50,13 @@ class ScanController:
             microsteps=config.get("STEPPER", "MICROSTEPS"),
             gear_ratio=config.get("STEPPER", "GEAR_RATIO"),
             pwm_frequency=None,
-            use_pwm=True,
+            use_pwm=use_pwm,
         )
 
     def _default_lidar_factory(self, config):  # pragma: no cover - hardware specific
-        from lib.stl27l.adapter import STL27LAdapter
+        from lib.lidar_driver import Lidar
 
-        # Get port and baud from config
-        device = config.get("LIDAR", "DEVICE")
-        port = config.get("LIDAR", device, "PORT")
-        baud = config.get("LIDAR", device, "BAUDRATE")
-        return STL27LAdapter(config, port=port, baud=baud)
+        return Lidar(config)
 
 
     # ------------------------------------------------------------------

@@ -61,7 +61,7 @@ def build_sample_package(lidar: Lidar) -> bytes:
 
 
 def test_lidar_collects_full_package(tmp_path):
-    config = Config(scans_root=str(tmp_path))
+    config = Config(scans_root=str(tmp_path), use_hardware=False)
     config.set(1, "LIDAR", config.DEVICE, "OUT_LEN")
     config.init(scan_id="test")
 

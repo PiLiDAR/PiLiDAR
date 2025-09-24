@@ -22,6 +22,11 @@ from pyntcloud import PyntCloud
 from scipy.spatial import cKDTree
 from scipy.spatial.transform import Rotation as R
 
+try:  # Open3D remains optional on the Pi image
+    import open3d as o3d
+except ImportError:  # pragma: no cover - optional dependency
+    o3d = None
+
 
 @dataclass
 class PointCloudData:
@@ -191,6 +196,7 @@ def process_raw(config, save: bool = True) -> Dict[str, Optional[PointCloudData]
                 scale=config.get("VERTEXCOLOUR", "SCALE"),
                 z_rotate=config.get("VERTEXCOLOUR", "Z_ROTATE"),
                 as_float=True,
+                flip_vertical=config.get("VERTEXCOLOUR", "FLIP_VERTICAL", default=False),
             )
             vertex_cloud = base_cloud.with_colors(colors)
             if save:
@@ -217,6 +223,169 @@ def process_raw(config, save: bool = True) -> Dict[str, Optional[PointCloudData]
 
 
 # ----------------------------------------------------------------------------
+# Open3D comparison pipeline
+# ----------------------------------------------------------------------------
+
+
+def _with_suffix(path: str, suffix: str) -> str:
+    root, ext = os.path.splitext(path)
+    return f"{root}{suffix}{ext}"
+
+
+def _require_open3d() -> "open3d":  # pragma: no cover - helper for optional dependency
+    if o3d is None:
+        raise ImportError(
+            "Open3D ist nicht installiert. Bitte `pip install open3d` ausführen, "
+            "um den Vergleichslauf zu verwenden."
+        )
+    return o3d
+
+
+def save_open3d_pointcloud(
+    pcd: "o3d.geometry.PointCloud",
+    filepath: str,
+    write_ascii: bool = True,
+    compressed: bool = False,
+) -> None:
+    _require_open3d()
+    directory, _ = os.path.split(filepath)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    o3d.io.write_point_cloud(filepath, pcd, write_ascii=write_ascii, compressed=compressed)
+
+
+def colormap_pcd_open3d(
+    pcd: "o3d.geometry.PointCloud",
+    intensities: Optional[np.ndarray] = None,
+    cmap: str = "viridis",
+    gamma: float = 2.2,
+) -> "o3d.geometry.PointCloud":
+    _require_open3d()
+    result = o3d.geometry.PointCloud(pcd)
+    if intensities is not None:
+        channel = np.asarray(intensities, dtype=np.float64)
+    elif len(result.colors) > 0:
+        channel = np.asarray(result.colors, dtype=np.float64)[:, 0]
+    else:
+        channel = np.zeros(len(result.points), dtype=np.float64)
+
+    if channel.size == 0:
+        return result
+
+    channel = channel - channel.min()
+    if channel.max() > 0:
+        channel /= channel.max()
+    if gamma != 1:
+        channel = np.power(channel, gamma)
+
+    colors = matplotlib.colormaps[cmap](channel)[:, :3].astype(np.float64)
+    result.colors = o3d.utility.Vector3dVector(colors)
+    return result
+
+
+def process_raw_open3d(
+    config,
+    save: bool = True,
+) -> Dict[str, Optional["o3d.geometry.PointCloud"]]:
+    """Process the raw scan using Open3D structures for comparison."""
+
+    _require_open3d()
+
+    if not os.path.exists(config.raw_path):
+        raise FileNotFoundError(f"Raw LiDAR data not found at {config.raw_path}")
+
+    raw_scan = load_raw_scan(config.raw_path)
+    array_3d = merge_2D_points(
+        raw_scan,
+        position_offset=(0, config.get("3D", "Y_OFFSET"), 0),
+        angle_offset=config.get("LIDAR", "LIDAR_OFFSET_ANGLE"),
+        up_vector=(0, 0, 1),
+    )
+
+    points = array_3d[:, :3]
+    intensities = array_3d[:, 3] / 255.0 if array_3d.shape[1] > 3 else None
+
+    base = o3d.geometry.PointCloud()
+    base.points = o3d.utility.Vector3dVector(points)
+    if intensities is not None:
+        base.colors = o3d.utility.Vector3dVector(np.repeat(intensities[:, None], 3, axis=1))
+    else:
+        base.colors = o3d.utility.Vector3dVector(np.zeros_like(points))
+
+    normal_radius = config.get("3D", "NORMAL_RADIUS")
+    if normal_radius > 0 and len(base.points) > 0:
+        base.estimate_normals(
+            o3d.geometry.KDTreeSearchParamHybrid(radius=normal_radius, max_nn=50)
+        )
+        base.orient_normals_towards_camera_location(np.zeros(3))
+
+    base.translate((0.0, 0.0, config.get("3D", "Z_OFFSET")))
+    scene_scale = config.get("3D", "SCALE")
+    if scene_scale != 1:
+        base.scale(scene_scale, center=(0.0, 0.0, 0.0))
+
+    ascii_flag = config.get("3D", "ASCII")
+    compression_flag = False
+
+    base_cloud = o3d.geometry.PointCloud(base)
+    intensity_cloud = colormap_pcd_open3d(base_cloud, intensities=intensities, gamma=1, cmap="viridis")
+    if save and len(intensity_cloud.points) > 0:
+        save_open3d_pointcloud(intensity_cloud, _with_suffix(config.intensity_pcd_path, "_o3d"), ascii_flag, compression_flag)
+
+    vertex_cloud: Optional["o3d.geometry.PointCloud"] = None
+    pano_path = config.pano_path
+    if config.get("ENABLE_VERTEXCOLOUR") and os.path.exists(pano_path):
+        pano = cv2.imread(pano_path)
+        if pano is None:
+            print("Warnung: Panorama konnte nicht geladen werden.")
+        else:
+            vertex_cloud = o3d.geometry.PointCloud(base_cloud)
+            colors = angular_lookup(
+                angular_from_cartesian(np.asarray(base_cloud.points)),
+                pano,
+                scale=config.get("VERTEXCOLOUR", "SCALE"),
+                z_rotate=config.get("VERTEXCOLOUR", "Z_ROTATE"),
+                as_float=True,
+                flip_vertical=config.get("VERTEXCOLOUR", "FLIP_VERTICAL", default=False),
+            )
+            vertex_cloud.colors = o3d.utility.Vector3dVector(colors.astype(np.float64))
+            if save and len(vertex_cloud.points) > 0:
+                save_open3d_pointcloud(vertex_cloud, _with_suffix(config.vertex_pcd_path, "_o3d"), ascii_flag, compression_flag)
+    elif config.get("ENABLE_VERTEXCOLOUR"):
+        print("Panorama-Färbung übersprungen (deaktiviert oder keine Bilddatei gefunden).")
+
+    filtered_cloud: Optional["o3d.geometry.PointCloud"] = None
+    if config.get("ENABLE_FILTERING") and len(intensity_cloud.points) > 0:
+        voxel_size = config.get("FILTERING", "VOXEL_SIZE")
+        nb_points = config.get("FILTERING", "NB_POINTS")
+        radius = config.get("FILTERING", "RADIUS")
+
+        low_res = intensity_cloud.voxel_down_sample(voxel_size)
+        if len(low_res.points) > 0:
+            _, keep_idx = low_res.remove_radius_outlier(nb_points=nb_points, radius=radius)
+            filtered_low = low_res.select_by_index(keep_idx)
+        else:
+            filtered_low = low_res
+
+        if len(filtered_low.points) > 0:
+            tree = o3d.geometry.KDTreeFlann(filtered_low)
+            keep: List[int] = []
+            for idx, point in enumerate(np.asarray(intensity_cloud.points)):
+                _, neighbours, _ = tree.search_radius_vector_3d(point, radius)
+                if neighbours:
+                    keep.append(idx)
+            filtered_cloud = intensity_cloud.select_by_index(keep)
+        else:
+            filtered_cloud = o3d.geometry.PointCloud(intensity_cloud)
+
+        if save and filtered_cloud is not None and len(filtered_cloud.points) > 0:
+            save_open3d_pointcloud(filtered_cloud, _with_suffix(config.filtered_pcd_path, "_o3d"), ascii_flag, compression_flag)
+
+    print("\nprocessing 3D (Open3D) completed.")
+    return {"intensity": intensity_cloud, "vertex": vertex_cloud, "filtered": filtered_cloud}
+
+
+# ----------------------------------------------------------------------------
 # Point cloud utilities
 # ----------------------------------------------------------------------------
 
@@ -233,50 +402,51 @@ def merge_2D_points(
     angle_offset: float = 0,
     up_vector: Tuple[float, float, float] = (0, 0, 1),
 ) -> np.ndarray:
+    """Merge the raw 2D sweeps into a single 3D array.
+
+    The implementation mirrors the geometry pipeline from the original
+    PiLiDAR project: each LiDAR sweep becomes an upright strip that is
+    positioned around the turntable axis using the recorded stepper angles.
+    """
+
     z_angles = raw_scan["z_angles"]
     cartesian_list = raw_scan["cartesian"]
 
     assembled: List[np.ndarray] = []
-    z_angle = 0.0
+    incremental_angle = 0.0
 
     for idx, points2d in enumerate(cartesian_list or []):
         if not isinstance(points2d, np.ndarray):
             points2d = np.asarray(points2d)
-        if points2d.size == 0:
+        if points2d.size == 0 or points2d.shape[1] < 2:
             continue
 
-        # Always treat the last column as intensity and keep remaining columns
-        # as geometric attributes.
-        if points2d.shape[1] < 2:
-            continue
+        # Insert Y=0 as the second column so that 2D-Y becomes 3D-Z (Z-up)
+        points3d = np.insert(points2d.astype(np.float64, copy=False), 1, 0.0, axis=1)
 
-        x_vals = points2d[:, 0].astype(np.float64)
-        y_vals = points2d[:, 1].astype(np.float64)
-
-        if points2d.shape[1] >= 4:
-            z_base = points2d[:, 2].astype(np.float64)
-            extras = points2d[:, 3:]
+        # Determine the absolute platform angle for this sweep
+        if z_angles is not None and idx < len(z_angles):
+            raw_angle = z_angles[idx]
+            try:
+                angle_value = float(raw_angle)
+                if np.isnan(angle_value):
+                    raise ValueError
+                incremental_angle = angle_value
+            except (TypeError, ValueError):
+                incremental_angle = incremental_angle - z_step if ccw else incremental_angle + z_step
         else:
-            z_base = np.zeros_like(x_vals)
-            extras = points2d[:, 2:]
+            incremental_angle = incremental_angle - z_step if ccw else incremental_angle + z_step
 
-        intensity = extras[:, :1] if extras.size else np.empty((len(x_vals), 0))
-        remaining = extras[:, 1:] if extras.size > 1 else np.empty((len(x_vals), 0))
+        # Mechanical offset correction (rotate around sensor forward axis)
+        points3d = rotate_3D(points3d, angle_offset, rotation_axis=(0, 1, 0))
 
-        points3d = np.column_stack((x_vals, z_base, y_vals))
-
-        if z_angles is not None:
-            z_angle = z_angles[idx]
-        else:
-            z_angle = z_angle - z_step if ccw else z_angle + z_step
-
-        rotated = rotate_3D(points3d, angle_offset, rotation_axis=(0, 1, 0))
-        rotated = rotate_3D(rotated, -z_angle, translation_vector=position_offset, rotation_axis=up_vector)
-
-        if intensity.size:
-            rotated = np.column_stack((rotated, intensity))
-        if remaining.size:
-            rotated = np.column_stack((rotated, remaining))
+        # Revolve the strip around the vertical axis while applying the stage offset
+        rotated = rotate_3D(
+            points3d,
+            -incremental_angle,
+            translation_vector=position_offset,
+            rotation_axis=up_vector,
+        )
 
         assembled.append(rotated)
 
@@ -296,10 +466,15 @@ def rotate_3D(
     points3d = np.asarray(points3d, dtype=np.float64)
     translation_vector = np.asarray(translation_vector, dtype=np.float64)
     rotation_axis = np.asarray(rotation_axis, dtype=np.float64)
-    rotation_axis = rotation_axis / (np.linalg.norm(rotation_axis) + 1e-12)
 
-    rotation = R.from_rotvec(np.deg2rad(rotation_degrees) * rotation_axis)
-    rotated = rotation.apply(points3d[:, :3] + translation_vector)
+    norm = np.linalg.norm(rotation_axis)
+    if norm == 0:
+        rotated = points3d[:, :3] + translation_vector
+    else:
+        rotation_axis = rotation_axis / norm
+        rotation = R.from_rotvec(np.deg2rad(rotation_degrees) * rotation_axis)
+        translated = points3d[:, :3] + translation_vector
+        rotated = rotation.apply(translated)
 
     if points3d.shape[1] > 3:
         rotated = np.column_stack((rotated, points3d[:, 3:]))
@@ -504,15 +679,13 @@ def get_sampling_coordinates(
 ) -> Tuple[np.ndarray, np.ndarray]:
     image_height, image_width = img_shape
 
-    longitude = angular_points[:, 2] + np.deg2rad(90 + z_rotate)
-    longitude = (longitude + 2 * np.pi) % (2 * np.pi)
-    image_x = (2 * np.pi - longitude) / (2 * np.pi) * image_width
-    image_x = np.clip(np.round(image_x).astype(int), 0, image_width - 1)
+    longitude = (angular_points[:, 2] + np.deg2rad(90 + z_rotate)) % (2 * np.pi)
+    image_x = (1.0 - longitude / (2 * np.pi)) * (image_width - 1)
+    image_x = np.clip(np.rint(image_x).astype(int), 0, image_width - 1)
 
-    latitude = np.pi / 2 - angular_points[:, 0]
-    latitude = (latitude + np.pi / 2) % np.pi
-    image_y = (1 - latitude / np.pi) * image_height
-    image_y = np.clip(np.round(image_y).astype(int), 0, image_height - 1)
+    latitude = np.clip(angular_points[:, 0], 0.0, np.pi)
+    image_y = (latitude / np.pi) * (image_height - 1)
+    image_y = np.clip(np.rint(image_y).astype(int), 0, image_height - 1)
 
     return image_x, image_y
 
@@ -524,6 +697,7 @@ def angular_lookup(
     degrees: bool = False,
     z_rotate: float = 0,
     as_float: bool = False,
+    flip_vertical: bool = False,
 ) -> np.ndarray:
     if degrees:
         angular_points = np.deg2rad(angular_points)
@@ -537,6 +711,8 @@ def angular_lookup(
         pano_rgb = cv2.resize(pano_rgb, (image_width, image_height), interpolation=cv2.INTER_AREA)
 
     image_x, image_y = get_sampling_coordinates(angular_points, (image_height, image_width), z_rotate=z_rotate)
+    if flip_vertical:
+        image_y = (image_height - 1) - image_y
     colors = pano_rgb[image_y, image_x]
 
     if as_float:
@@ -624,7 +800,13 @@ def save_pointcloud(
 
     if ext == ".ply" or ext == ".pcd":
         cloud = pcd if isinstance(pcd, PointCloudData) else PointCloudData(pcd)
-        cloud.to_pyntcloud().to_file(filepath)
+
+        data_frame = cloud.to_dataframe()
+        for channel in ("red", "green", "blue"):
+            if channel in data_frame.columns:
+                data_frame[channel] = np.clip(data_frame[channel] / 255.0, 0.0, 1.0)
+
+        PyntCloud(data_frame).to_file(filepath)
         return
 
     if ext == ".csv":

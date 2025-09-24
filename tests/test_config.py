@@ -4,7 +4,7 @@ from lib.config import Config
 
 
 def test_config_creates_scan_directories(tmp_path):
-    config = Config(scans_root=str(tmp_path))
+    config = Config(scans_root=str(tmp_path), use_hardware=False)
     config.init()
 
     assert os.path.isdir(config.scan_dir)

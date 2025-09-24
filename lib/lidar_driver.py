@@ -13,7 +13,7 @@ follow every step of the decoding process.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import numpy as np
 import serial
@@ -106,6 +106,7 @@ class Lidar:
         self.cartesian_list: List[np.ndarray] = []
         self.angular_list: List[np.ndarray] = []
         self.package_history: List[PackageData] = []
+        self.stepper_log: List[Dict[str, float]] = []
 
     # ------------------------------------------------------------------
     # helper and housekeeping methods
@@ -330,6 +331,7 @@ class Lidar:
             cartesian_list=self.cartesian_list,
             packages=packages,
             metadata=metadata,
+            stepper_log=list(self.stepper_log) if self.stepper_log else None,
         )
         save_raw_scan(self.raw_path, raw_scan)
         return raw_scan

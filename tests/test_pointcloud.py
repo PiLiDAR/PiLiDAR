@@ -5,7 +5,7 @@ from lib.pointcloud import PointCloudData, get_scan_dict, process_raw, save_raw_
 
 
 def test_process_raw_returns_intensity_pointcloud(tmp_path):
-    config = Config(scans_root=str(tmp_path))
+    config = Config(scans_root=str(tmp_path), use_hardware=False)
     config.init(scan_id="testscan")
     config.set(False, "ENABLE_VERTEXCOLOUR")
     config.set(False, "ENABLE_FILTERING")
