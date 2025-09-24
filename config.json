@@ -228,7 +228,11 @@
         "EXT": "ply",
         "ASCII": false,
         "INTENSITY_SUFFIX": "_intensity",
-        "COLOR_SUFFIX": "_vertex"
+        "COLOR_SUFFIX": "_vertex",
+        "INVERT_Z_AXIS": false,
+        "UP_VECTOR": [0, 0, 1],
+        "CLOUDCOMPARE_COMPATIBLE": false,
+        "_coordinate_note": "INVERT_Z_AXIS: true für CloudCompare (Z nach oben). CLOUDCOMPARE_COMPATIBLE: Optimiert für CloudCompare-Import"
     },
     "FILTERING": {
         "FILTER_ON_PI": false,

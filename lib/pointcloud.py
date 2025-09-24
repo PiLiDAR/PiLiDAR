@@ -161,7 +161,9 @@ def process_raw(config, save: bool = True) -> Dict[str, Optional[PointCloudData]
         raw_scan,
         position_offset=(0, config.get("3D", "Y_OFFSET"), 0),
         angle_offset=config.get("LIDAR", "LIDAR_OFFSET_ANGLE"),
-        up_vector=(0, 0, 1),
+        up_vector=tuple(config.get("3D", "UP_VECTOR", default=[0, 0, 1])),
+        invert_z=config.get("3D", "INVERT_Z_AXIS", default=False),
+        cloudcompare_compatible=config.get("3D", "CLOUDCOMPARE_COMPATIBLE", default=False),
     )
 
     base_cloud = PointCloudData(
@@ -330,7 +332,9 @@ def process_raw_open3d(
         raw_scan,
         position_offset=(0, config.get("3D", "Y_OFFSET"), 0),
         angle_offset=config.get("LIDAR", "LIDAR_OFFSET_ANGLE"),
-        up_vector=(0, 0, 1),
+        up_vector=tuple(config.get("3D", "UP_VECTOR", default=[0, 0, 1])),
+        invert_z=config.get("3D", "INVERT_Z_AXIS", default=False),
+        cloudcompare_compatible=config.get("3D", "CLOUDCOMPARE_COMPATIBLE", default=False),
     )
 
     points = array_3d[:, :3]
@@ -431,6 +435,27 @@ def remove_NaN(array: np.ndarray) -> np.ndarray:
     return array[~np.isnan(array).any(axis=1)]
 
 
+def apply_coordinate_system_corrections(
+    points: np.ndarray,
+    invert_z: bool = False,
+    cloudcompare_compatible: bool = False,
+    up_vector: Tuple[float, float, float] = (0, 0, 1)
+) -> np.ndarray:
+    """Apply coordinate system corrections for different software compatibility."""
+    corrected = points.copy()
+    
+    if invert_z:
+        # Invert Z-axis (positive Z up instead of down)
+        corrected[:, 2] *= -1
+    
+    if cloudcompare_compatible:
+        # CloudCompare expects Z-up coordinate system
+        # Additional rotations or transformations can be added here
+        pass
+    
+    return corrected
+
+
 def merge_2D_points(
     raw_scan: Dict[str, Any],
     z_step: float = 1,
@@ -438,6 +463,8 @@ def merge_2D_points(
     position_offset: Tuple[float, float, float] = (0, 0, 0),
     angle_offset: float = 0,
     up_vector: Tuple[float, float, float] = (0, 0, 1),
+    invert_z: bool = False,
+    cloudcompare_compatible: bool = False,
 ) -> np.ndarray:
     """Merge the raw 2D sweeps into a single 3D array.
 
@@ -460,6 +487,10 @@ def merge_2D_points(
 
         # Insert Y=0 as the second column so that 2D-Y becomes 3D-Z (Z-up)
         points3d = np.insert(points2d.astype(np.float64, copy=False), 1, 0.0, axis=1)
+        
+        # Optional Z-axis inversion for CloudCompare compatibility
+        # This can be controlled via config or parameter
+        # points3d[:, 2] *= -1  # Uncomment to invert Z-axis
 
         # Determine the absolute platform angle for this sweep
         if z_angles is not None and idx < len(z_angles):
@@ -491,6 +522,16 @@ def merge_2D_points(
         return np.zeros((0, 4))
 
     merged = np.concatenate(assembled, axis=0)
+    
+    # Apply coordinate system corrections
+    if invert_z or cloudcompare_compatible:
+        merged = apply_coordinate_system_corrections(
+            merged, 
+            invert_z=invert_z, 
+            cloudcompare_compatible=cloudcompare_compatible,
+            up_vector=up_vector
+        )
+    
     return remove_NaN(merged)
 
 
