@@ -205,6 +205,21 @@ class A4988:
         if self.enable_pin is not None:
             GPIO.output(self.enable_pin, GPIO.HIGH)
 
+    def force_disable(self) -> None:
+        """Force the stepper driver to be disabled by setting pin 17 HIGH.
+        
+        This method can be called to ensure pin 17 stays HIGH even after
+        GPIO cleanup or system initialization.
+        """
+        if self.enable_pin is not None:
+            try:
+                # Ensure pin is configured as output if not already
+                GPIO.setmode(GPIO.BCM)
+                GPIO.setup(self.enable_pin, GPIO.OUT)
+                GPIO.output(self.enable_pin, GPIO.HIGH)
+            except Exception:
+                pass  # Ignore errors during force disable
+
     def _ensure_pwm(self):
         if not self._supports_pwm:
             raise RuntimeError("PWM support not available on this platform")
@@ -278,6 +293,8 @@ class A4988:
         for _ in range(steps):
             self.step()
         self.current_steps += steps if not direction else -steps
+        # Automatically disable stepper after movement to keep pin 17 HIGH
+        self.disable()
 
     def _move_steps_pwm(self, steps: int, direction: bool) -> None:
         self.enable()
@@ -293,6 +310,8 @@ class A4988:
         GPIO.output(self.step_pin, False)
 
         self.current_steps += steps if not direction else -steps
+        # Automatically disable stepper after movement to keep pin 17 HIGH
+        self.disable()
 
     def move_to_angle(self, target_angle: float, mod: bool = True) -> None:
         """Rotate the platform to an absolute target angle.
@@ -315,6 +334,24 @@ class A4988:
         steps_difference = self.get_steps_for_angle(angle_difference)
         self.move_steps(steps_difference)
 
+    def move_to_angle_reverse(self, target_angle: float = 0.0) -> None:
+        """Rotate the platform back to target angle by reversing the scan direction.
+        
+        This method ensures the stepper returns to the starting position by
+        moving in the opposite direction of the scan, unwinding the movement.
+        """
+        current_angle = self.get_current_angle(mod=False)  # Get absolute angle without modulo
+        
+        # Calculate the reverse movement - go back the way we came
+        reverse_angle = current_angle - target_angle
+        
+        if reverse_angle != 0:
+            print(f"Returning from {current_angle:.2f}° to {target_angle:.2f}° (reverse movement: {-reverse_angle:.2f}°)")
+            reverse_steps = self.get_steps_for_angle(-reverse_angle)
+            self.move_steps(reverse_steps)
+        else:
+            print(f"Already at target angle {target_angle:.2f}°")
+
     def get_current_angle(self, mod: bool = True) -> float:
         """Return the current angle of the scanner platform."""
 
@@ -336,7 +373,16 @@ class A4988:
                 pass
             self._pwm = None
 
+        # Ensure stepper is disabled and pin 17 is HIGH before cleanup
         self.disable()
+        
+        # Force pin 17 HIGH one more time before cleanup to ensure it stays HIGH
+        if self.enable_pin is not None:
+            try:
+                GPIO.output(self.enable_pin, GPIO.HIGH)
+            except Exception:
+                pass  # Ignore errors during shutdown
+        
         GPIO.cleanup(self.ms_pins)
         GPIO.cleanup(self.dir_pin)
         GPIO.cleanup(self.step_pin)
@@ -406,6 +452,9 @@ class A4988:
             "start_time": 0.0,
             "base_steps": float(self.current_steps),
         }
+        
+        # Automatically disable stepper after continuous movement to keep pin 17 HIGH
+        self.disable()
 
 
 if __name__ == "__main__":
@@ -447,7 +496,7 @@ if __name__ == "__main__":
             sleep(0.5) # delay for photo
             stepper.move_to_angle(90 * (i+1))
         
-        stepper.move_to_angle(0)
+        stepper.move_to_angle_reverse(0)
         stepper.move_steps(1)  # compensate negative value caused by rounding
         sleep(1)
 
@@ -459,7 +508,7 @@ if __name__ == "__main__":
             stepper.move_steps(config.steps if config.SCAN_ANGLE > 0 else -config.steps)
 
         print(f"reached {round(stepper.get_current_angle(), 2)}° (current steps: {stepper.current_steps}), returning ..")
-        stepper.move_to_angle(0)
+        stepper.move_to_angle_reverse(0)
         
     finally:
         stepper.close()

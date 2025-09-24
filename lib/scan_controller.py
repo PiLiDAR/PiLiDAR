@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import threading
 import time
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional
 
 
 class ScanController:
@@ -53,9 +53,14 @@ class ScanController:
         )
 
     def _default_lidar_factory(self, config):  # pragma: no cover - hardware specific
-        from lib.lidar_driver import Lidar
+        from lib.stl27l.adapter import STL27LAdapter
 
-        return Lidar(config, visualization=None)
+        # Get port and baud from config
+        device = config.get("LIDAR", "DEVICE")
+        port = config.get("LIDAR", device, "PORT")
+        baud = config.get("LIDAR", device, "BAUDRATE")
+        return STL27LAdapter(config, port=port, baud=baud)
+
 
     # ------------------------------------------------------------------
     # callback registration
@@ -212,11 +217,42 @@ class ScanController:
             self.lidar.z_angle = self.stepper.get_current_angle(mod=False)
 
         if self.stepper is not None:
+            # Für Panorama-Aufnahme normale move_to_angle verwenden (kürzester Weg)
             self.stepper.move_to_angle(0)
             time.sleep(0.5)
 
     def _capture_lidar(self):
         scan_delay = self.config.get("STEPPER", "SCAN_DELAY")
+        stepper_log: List[Dict[str, float]] = []
+
+        def record_stepper_state(angle: Optional[float] = None) -> None:
+            if self.stepper is None:
+                return
+
+            state_angle = angle
+            if state_angle is None:
+                state_angle = self.stepper.get_current_angle(mod=False)
+            if state_angle is None:
+                return
+
+            timestamp = time.time()
+            steps_value: Optional[int] = None
+            if hasattr(self.stepper, "get_steps_for_angle"):
+                try:
+                    steps_value = int(self.stepper.get_steps_for_angle(state_angle))
+                except Exception:
+                    steps_value = getattr(self.stepper, "current_steps", None)
+            else:
+                steps_value = getattr(self.stepper, "current_steps", None)
+
+            entry: Dict[str, float] = {
+                "timestamp": float(timestamp),
+                "angle": float(state_angle),
+            }
+            if steps_value is not None:
+                entry["steps"] = float(steps_value)
+            stepper_log.append(entry)
+
         supports_continuous = (
             self.stepper is not None
             and getattr(self.stepper, "use_pwm", False)
@@ -232,6 +268,7 @@ class ScanController:
             rotation_done = False
             start_angle = self.stepper.get_current_angle(mod=False)
             self.lidar.z_angle = start_angle
+            record_stepper_state(start_angle)
 
             if steps_per_second > 0 and total_rotation > 0:
                 self.stepper.start_continuous(steps_per_second, direction=direction_negative)
@@ -243,11 +280,13 @@ class ScanController:
                     if stepper_active:
                         self.stepper.stop_continuous()
                         stepper_active = False
+                        record_stepper_state()
                     self.lidar.request_stop()
                     return
 
                 if stepper_active:
                     current_angle = self.stepper.get_current_angle(mod=False)
+                    record_stepper_state(current_angle)
                     self.lidar.z_angle = current_angle
 
                     rotated = (
@@ -260,6 +299,7 @@ class ScanController:
                         rotation_done = True
                         self.stepper.stop_continuous()
                         stepper_active = False
+                        record_stepper_state(current_angle)
                         self.lidar.request_stop()
                 else:
                     if self.stepper is not None:
@@ -273,24 +313,58 @@ class ScanController:
             if self.stepper is not None and total_rotation == 0:
                 self.lidar.z_angle = self.stepper.get_current_angle(mod=False)
         else:
+            if self.stepper is not None:
+                record_stepper_state(self.stepper.get_current_angle(mod=False))
+
             def move_steps_callback():
                 if self._stop_event.is_set():
+                    record_stepper_state()
                     self.lidar.request_stop()
                     return
                 if self.stepper is None:
                     return
                 steps = self.config.steps if self.config.SCAN_ANGLE > 0 else -self.config.steps
                 self.stepper.move_steps(steps)
-                self.lidar.z_angle = self.stepper.get_current_angle()
+                angle_mod = self.stepper.get_current_angle()
+                self.lidar.z_angle = angle_mod
+                record_stepper_state(self.stepper.get_current_angle(mod=False))
                 time.sleep(scan_delay)
 
             self._notify("Starte LiDAR-Aufnahme...")
             self.lidar.read_loop(callback=move_steps_callback, max_packages=self.config.max_packages)
 
-        if self.stepper is not None:
-            self.stepper.move_to_angle(0)
+        if hasattr(self.lidar, "stop_motor"):
+            try:
+                self.lidar.stop_motor()
+            except Exception as exc:  # pragma: no cover - hardware environment
+                self._notify(f"Warnung: LiDAR-Motor konnte nicht gestoppt werden ({exc}).")
 
-        metadata = {"samples": len(self.lidar.package_history)}
+        if self.stepper is not None:
+            try:
+                self.stepper.stop_continuous()
+            except Exception:
+                pass
+            
+            # Rückwärts zur Ausgangsposition (0°) zurückkehren
+            if hasattr(self.stepper, 'move_to_angle_reverse'):
+                self._notify("Stepper kehrt rückwärts zur Ausgangsposition zurück...")
+                self.stepper.move_to_angle_reverse(0.0)
+            else:
+                # Fallback für ältere Implementierungen
+                self.stepper.move_to_angle(0)
+            
+            record_stepper_state(self.stepper.get_current_angle(mod=False))
+            if hasattr(self.stepper, "disable"):
+                try:
+                    self.stepper.disable()
+                except Exception:
+                    pass
+
+        if hasattr(self.lidar, "stepper_log"):
+            self.lidar.stepper_log = list(stepper_log)
+
+        packages = getattr(self.lidar, "package_history", [])
+        metadata = {"samples": len(packages)}
         raw_scan = self.lidar.create_raw_scan(metadata=metadata)
         self._notify(f"Rohdaten gespeichert unter {self.config.raw_path}")
         return raw_scan
@@ -317,4 +391,7 @@ class ScanController:
             self.lidar.close()
         if self.stepper is not None:
             self.stepper.close()
+        
+        # Force stepper to stay disabled after cleanup
+        self.config.force_stepper_disabled()
         self.config.relay_off()

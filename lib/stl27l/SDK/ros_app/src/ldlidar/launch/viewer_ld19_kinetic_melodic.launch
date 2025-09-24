@@ -1,0 +1,4 @@
+<launch>
+  <include file="$(find ldlidar)/launch/ld19.launch" />
+  <node name="rviz_show_ldlidar" pkg="rviz" type="rviz" args="-d $(find ldlidar)/rviz/ldlidar_kinetic_melodic.rviz" required="true"/>
+</launch>

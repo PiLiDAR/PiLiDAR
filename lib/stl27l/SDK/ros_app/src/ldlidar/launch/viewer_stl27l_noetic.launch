@@ -1,0 +1,4 @@
+<launch>
+  <include file="$(find ldlidar)/launch/stl27l.launch" />
+  <node name="rviz_show_ldlidar" pkg="rviz" type="rviz" args="-d $(find ldlidar)/rviz/ldlidar_noetic.rviz" required="true"/>
+</launch>

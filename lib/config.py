@@ -236,6 +236,7 @@ class Config:
         if self.stepper_enable_pin is not None:
             self.GPIO.setup(self.stepper_enable_pin, self.GPIO.OUT)
             # High = deaktiviert → verhindert unkontrolliertes Anlaufen beim Booten
+            # Pin 17 stays HIGH by default to keep stepper disabled
             self.GPIO.output(self.stepper_enable_pin, self.GPIO.HIGH)
 
         if self.lidar_power_pin is not None:
@@ -259,6 +260,18 @@ class Config:
     def lidar_power_off(self):
         if self.lidar_power_pin is not None and self.has_gpio():
             self.GPIO.output(self.lidar_power_pin, self.GPIO.LOW)
+
+    def force_stepper_disabled(self):
+        """Force stepper motor to be disabled by setting enable pin HIGH."""
+        if self.stepper_enable_pin is not None and self.has_gpio():
+            try:
+                # Ensure pin is configured as output
+                if self.GPIO.gpio_function(self.stepper_enable_pin) != self.GPIO.OUT:
+                    self.GPIO.setup(self.stepper_enable_pin, self.GPIO.OUT)
+                # Set pin HIGH to disable stepper
+                self.GPIO.output(self.stepper_enable_pin, self.GPIO.HIGH)
+            except Exception:
+                pass  # Ignore errors during force disable
 
 
 def format_value(value, digits):

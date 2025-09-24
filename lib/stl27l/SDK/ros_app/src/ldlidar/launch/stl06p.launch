@@ -1,0 +1,35 @@
+<launch>
+<!-- ldldiar message publisher node -->
+ <node name="STL06P" pkg="ldlidar" type="ldlidar" output="screen" >
+  <param name="product_name" value="LDLiDAR_STL06P"/>
+  <param name="topic_name" value="scan"/>
+  <param name="frame_id" value="base_laser"/>
+  <!--Serial port communication mode or network port communication mode configuration-->
+  <!--enable serial communication mode:-->
+  <!-- <param name="enable_serial_or_network_communication" value="true"/>  -->
+  <!--enable network communication mode:-->
+  <!-- <param name="enable_serial_or_network_communication" value="false"/> -->
+  <param name="enable_serial_or_network_communication" value="true"/>
+  <param name="port_name" value ="/dev/ttyUSB0"/>
+  <param name="port_baudrate" value ="230400"/>
+  <param name="server_ip" value="192.168.1.200"/>
+  <param name="server_port" value="2000"/>
+  <!-- Set laser scan directon: -->
+  <!--    1. Set counterclockwise, example: <param name="laser_scan_dir" type="bool" value="true"/> -->
+  <!--    2. Set clockwise,        example: <param name="laser_scan_dir" type="bool" value="false"/> -->
+  <param name="laser_scan_dir" type="bool" value="true"/>
+  <!-- Angle crop setting, Mask data within the set angle range -->
+  <!--    1. Enable angle crop fuction: -->
+  <!--       1.1. enable angle crop,  example: <param name="enable_angle_crop_func" type="bool" value="true"/> -->
+  <!--       1.2. disable angle crop, example: <param name="enable_angle_crop_func" type="bool" value="false"/> -->
+  <param name="enable_angle_crop_func" type="bool" value="false"/>
+  <!--    2. Angle cropping interval setting, The distance and intensity data within the set angle range will be set to 0 --> 
+  <!--       angle >= "angle_crop_min" and angle <= "angle_crop_max", unit is degress -->
+  <param name="angle_crop_min" type="double" value="135.0"/>
+  <param name="angle_crop_max" type="double" value="225.0"/>
+  <param name="measure_point_freq" type="int" value="5000"/>
+ </node>
+ <!-- publisher tf transform, parents frame is base_link, child frame is base_laser -->
+ <!-- args="x y z yaw pitch roll parents_frame_id child_frame_id period_in_ms"-->
+ <node name="base_to_laser_stl06p" pkg="tf" type="static_transform_publisher"  args="0.0 0.0 0.18 0 0.0 0.0 base_link base_laser 50"/>
+</launch>

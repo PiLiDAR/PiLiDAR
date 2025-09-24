@@ -11,7 +11,7 @@ import os
 import threading
 import pickle
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import cv2
 import matplotlib
@@ -103,6 +103,7 @@ def get_scan_dict(
     hardware=None,
     location=None,
     author=None,
+    stepper_log=None,
 ):
     header = {
         "scan_id": scan_id,
@@ -122,6 +123,8 @@ def get_scan_dict(
         "cartesian": cartesian_list,
         "packages": packages,
     }
+    if stepper_log is not None:
+        raw_scan["stepper_log"] = stepper_log
     return raw_scan
 
 
@@ -233,24 +236,55 @@ def merge_2D_points(
     z_angles = raw_scan["z_angles"]
     cartesian_list = raw_scan["cartesian"]
 
-    pointcloud = np.zeros((0, 4))
+    assembled: List[np.ndarray] = []
     z_angle = 0.0
 
     for idx, points2d in enumerate(cartesian_list or []):
         if not isinstance(points2d, np.ndarray):
             points2d = np.asarray(points2d)
-        points3d = np.insert(points2d, 1, values=0, axis=1)
+        if points2d.size == 0:
+            continue
+
+        # Always treat the last column as intensity and keep remaining columns
+        # as geometric attributes.
+        if points2d.shape[1] < 2:
+            continue
+
+        x_vals = points2d[:, 0].astype(np.float64)
+        y_vals = points2d[:, 1].astype(np.float64)
+
+        if points2d.shape[1] >= 4:
+            z_base = points2d[:, 2].astype(np.float64)
+            extras = points2d[:, 3:]
+        else:
+            z_base = np.zeros_like(x_vals)
+            extras = points2d[:, 2:]
+
+        intensity = extras[:, :1] if extras.size else np.empty((len(x_vals), 0))
+        remaining = extras[:, 1:] if extras.size > 1 else np.empty((len(x_vals), 0))
+
+        points3d = np.column_stack((x_vals, z_base, y_vals))
 
         if z_angles is not None:
             z_angle = z_angles[idx]
         else:
             z_angle = z_angle - z_step if ccw else z_angle + z_step
 
-        points3d = rotate_3D(points3d, angle_offset, rotation_axis=(0, 1, 0))
-        points3d = rotate_3D(points3d, -z_angle, translation_vector=position_offset, rotation_axis=up_vector)
-        pointcloud = np.append(pointcloud, points3d, axis=0)
+        rotated = rotate_3D(points3d, angle_offset, rotation_axis=(0, 1, 0))
+        rotated = rotate_3D(rotated, -z_angle, translation_vector=position_offset, rotation_axis=up_vector)
 
-    return remove_NaN(pointcloud)
+        if intensity.size:
+            rotated = np.column_stack((rotated, intensity))
+        if remaining.size:
+            rotated = np.column_stack((rotated, remaining))
+
+        assembled.append(rotated)
+
+    if not assembled:
+        return np.zeros((0, 4))
+
+    merged = np.concatenate(assembled, axis=0)
+    return remove_NaN(merged)
 
 
 def rotate_3D(

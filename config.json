@@ -7,8 +7,8 @@
         "ENABLE_3D": "Steuert, ob aus vorhandenen Messdaten Punktwolken-Dateien erzeugt werden.",
         "ENABLE_VERTEXCOLOUR": "Schaltet die farbige Punktwolke frei. Benötigt ein Panorama, sonst wird nur die Intensität genutzt.",
         "ENABLE_FILTERING": "Aktiviert eine optionale Glättung: Ausreißerpunkte werden entfernt, kostet auf dem Pi aber Rechenzeit.",
-        "SCANS_ROOT": "Überordner, in dem jeder Scan sein eigenes Verzeichnis erhält.",
-        "ANGULAR_DIGITS": "Anzahl der Nachkommastellen für Winkelangaben in Dateinamen, z. B. image_12.345.jpg.",
+        "SCANS_ROOT": "Überordner, in dem jeder Scan sein eigenes Verzeichnis erhält. Standard: 'scans'",
+        "ANGULAR_DIGITS": "Anzahl der Nachkommastellen für Winkelangaben in Dateinamen, z. B. image_12.345.jpg. Standard: 3 Stellen",
         "LIDAR": {
             "_description": "Alle Einstellungen rund um den STL27L LiDAR-Sensor.",
             "DEVICE": "Bezeichnung des Standardprofils, das genutzt werden soll. Aktuell gibt es nur 'STL27L'.",
@@ -20,13 +20,13 @@
                 "OUT_LEN": "Wie viele Messpakete gesammelt werden, bevor der Stepper zum nächsten Winkel fährt.",
                 "OFFSET": "Korrekturwert in Grad, falls der Sensor mechanisch leicht verdreht montiert ist."
             },
-            "LIDAR_OFFSET_ANGLE": "Zusätzliche Rotationskorrektur in Grad, um das Koordinatensystem an das Gehäuse anzupassen.",
-            "POWER_PIN": "GPIO-Pin, der den LiDAR mit Strom versorgt (Relais oder Transistor).",
-            "MOTOR_START_COMMAND": "Zeichen, das der LiDAR-USB-Port empfängt, um den internen Motor zu starten.",
-            "MOTOR_STOP_COMMAND": "Zeichen zum Anhalten des LiDAR-Motors.",
-            "TARGET_RES": "Horizontale Winkelauflösung in Grad. Brüche wie '1/6' sind erlaubt.",
-            "TARGET_SPEED": "Geplante Drehgeschwindigkeit des LiDAR-Motors in Hertz.",
-            "RAW_NAME": "Dateiendung für den gespeicherten Rohdatensatz.",
+            "LIDAR_OFFSET_ANGLE": "Zusätzliche Rotationskorrektur in Grad, um das Koordinatensystem an das Gehäuse anzupassen. Standard: -1.05°",
+            "POWER_PIN": "GPIO-Pin, der den LiDAR mit Strom versorgt (Relais oder Transistor). Standard: Pin 23",
+            "MOTOR_START_COMMAND": "Zeichen, das der LiDAR-USB-Port empfängt, um den internen Motor zu starten. Standard: '1'",
+            "MOTOR_STOP_COMMAND": "Zeichen zum Anhalten des LiDAR-Motors. Standard: '0'",
+            "TARGET_RES": "Horizontale Winkelauflösung in Grad. Brüche wie '1/6' sind erlaubt. Bestimmt Schrittweite des Steppers.",
+            "TARGET_SPEED": "Geplante Drehgeschwindigkeit des LiDAR-Motors in Hertz. Standard: 10 Hz = 600 U/min",
+            "RAW_NAME": "Dateiendung für den gespeicherten Rohdatensatz. Standard: '_lidar.pkl'",
             "protocol": {
                 "_description": "Werte aus dem Herstellerprotokoll. Änderungen sind nur bei anderen Geräten nötig.",
                 "start_byte": "Kennbyte für den Beginn eines Datenpakets (Hexadezimal ohne 0x).",
@@ -41,76 +41,76 @@
             "_description": "Steuerung des A4988-Schrittmotortreibers.",
             "pins": {
                 "_description": "Zuordnung der Raspberry-Pi-GPIOs zum A4988.",
-                "DIR_PIN": "Legt die Drehrichtung fest. High = eine Richtung, Low = die andere.",
-                "STEP_PIN": "Erzeugt bei jedem Impuls einen Motorschritt.",
-                "ENABLE_PIN": "Aktiviert den Treiber (Low = Motor aktiv).",
-                "MS_PINS": "GPIO-Pins für Mikrostepping. Die Werte [5,6,13] bedeuten 16-fach Mikrostepping."
+                "DIR_PIN": "Legt die Drehrichtung fest. High = eine Richtung, Low = die andere. Standard: Pin 26",
+                "STEP_PIN": "Erzeugt bei jedem Impuls einen Motorschritt. Standard: Pin 19",
+                "ENABLE_PIN": "Aktiviert den Treiber (Low = Motor aktiv, High = deaktiviert). Standard: Pin 17",
+                "MS_PINS": "GPIO-Pins für Mikrostepping. Die Werte [5,6,13] bedeuten 16-fach Mikrostepping. MS1=Pin5, MS2=Pin6, MS3=Pin13"
             },
-            "RELAY_PIN": "Schaltet die Spannungsversorgung des Motors ein oder aus.",
-            "SCAN_ANGLE": "Vertikaler Drehbereich des Aufbaus in Grad.",
-            "GEAR_RATIO": "Mathematische Formel für das Getriebeverhältnis zwischen Motor und Plattform.",
-            "MICROSTEPS": "Mikroschritte pro Vollschritt (1, 2, 4, 8 oder 16). Höhere Werte = feinere Bewegung.",
-        "STEP_DELAY": "Wartezeit in Sekunden zwischen zwei Schrittimpulsen. Im PWM-Standardbetrieb nur als Fallback ohne PWM relevant.",
-        "SCAN_DELAY": "Pause in Sekunden nach jedem horizontalen Schritt. Bei aktivem PWM-Betrieb nur als Fallback ohne PWM relevant.",
-            "STEPPER_RES": "Wie viele Vollschritte der Motor pro Umdrehung hat (Standard: 200 bei NEMA17).",
-            "STEP_ANGLE": "Wird automatisch berechnet. null bedeutet: Bitte nicht manuell eintragen."
+            "RELAY_PIN": "Schaltet die Spannungsversorgung des Motors ein oder aus. Standard: Pin 24",
+            "SCAN_ANGLE": "Vertikaler Drehbereich des Aufbaus in Grad. Standard: 180° für Halbkreis-Scan",
+            "GEAR_RATIO": "Mathematische Formel für das Getriebeverhältnis zwischen Motor und Plattform. '1 + 38/14' = 3.714:1 Untersetzung",
+            "MICROSTEPS": "Mikroschritte pro Vollschritt (1, 2, 4, 8 oder 16). Höhere Werte = feinere Bewegung. Standard: 16",
+        "STEP_DELAY": "Wartezeit in Sekunden zwischen zwei Schrittimpulsen. Im PWM-Standardbetrieb nur als Fallback ohne PWM relevant. Standard: 0.0005s",
+        "SCAN_DELAY": "Pause in Sekunden nach jedem horizontalen Schritt. Bei aktivem PWM-Betrieb nur als Fallback ohne PWM relevant. Standard: 0.008s",
+            "STEPPER_RES": "Wie viele Vollschritte der Motor pro Umdrehung hat (Standard: 200 bei NEMA17). 1.8° pro Schritt",
+            "STEP_ANGLE": "Wird automatisch berechnet aus 360°/STEPPER_RES. null bedeutet: Bitte nicht manuell eintragen."
         },
         "CAM": {
             "_description": "Einstellungen der Raspberry Pi Kamera.",
-            "preview_dims": "Auflösung der Live-Vorschau in Pixeln (Breite, Höhe).",
-            "dims": "Endgültige Fotoauflösung in Pixeln.",
-            "preview_denoise": "Rauschfilter für die Vorschau. 'cdn_off' = kein Filter.",
-            "denoise": "Rauschfilter für das eigentliche Foto. 'cdn_fast' = schneller Kompromiss.",
-            "awbgains": "Manuelle Weißabgleichswerte (Rot, Blau). 1 bedeutet: Automatische Werte verwenden.",
-            "max_iterations": "Wie oft der automatische Weißabgleich nachjustieren darf.",
-            "awb_thres": "Schwellwert, wann der Weißabgleich als stabil gilt.",
-            "set_gain": "Verstärkung der Kamera. 1 = Standardhelligkeit.",
-            "sharpness": "Bildschärfung (0 = aus, 1 = sehr stark).",
-            "saturation": "Farbsättigung (0 = neutral, 1 = kräftig).",
-            "AEB": "Anzahl zusätzlicher Belichtungen für HDR. 0 = deaktiviert.",
-            "AEB_STOPS": "Belichtungsabstände in Blendenstufen für die HDR-Reihe.",
-            "raw": "true = zusätzlich Rohdaten speichern. false = nur JPEG/PNG.",
-            "remove_tmp": "true = Aufräumen der temporären HDR-Dateien nach dem Stitchen."
+            "preview_dims": "Auflösung der Live-Vorschau in Pixeln (Breite, Höhe). [320, 240] = kleine Vorschau für Performance",
+            "dims": "Endgültige Fotoauflösung in Pixeln. [4056, 3040] = maximale Auflösung der Pi-Kamera",
+            "preview_denoise": "Rauschfilter für die Vorschau. 'cdn_off' = kein Filter für bessere Performance",
+            "denoise": "Rauschfilter für das eigentliche Foto. 'cdn_fast' = schneller Kompromiss zwischen Qualität und Geschwindigkeit",
+            "awbgains": "Manuelle Weißabgleichswerte (Rot, Blau). [1, 1] bedeutet: Automatische Werte verwenden",
+            "max_iterations": "Wie oft der automatische Weißabgleich nachjustieren darf. Standard: 10 Versuche",
+            "awb_thres": "Schwellwert, wann der Weißabgleich als stabil gilt. 0.01 = 1% Abweichung toleriert",
+            "set_gain": "Verstärkung der Kamera. 1 = Standardhelligkeit (automatisch)",
+            "sharpness": "Bildschärfung (0 = aus, 1 = sehr stark). 0.5 = moderater Mittelwert",
+            "saturation": "Farbsättigung (0 = neutral, 1 = kräftig). 0.8 = leicht erhöhte Sättigung",
+            "AEB": "Anzahl zusätzlicher Belichtungen für HDR. 1 = eine Über-/Unterbelichtung, 0 = deaktiviert",
+            "AEB_STOPS": "Belichtungsabstände in Blendenstufen für die HDR-Reihe. 2 = ±2 Stops",
+            "raw": "true = zusätzlich Rohdaten speichern. false = nur JPEG/PNG (spart Speicher)",
+            "remove_tmp": "true = Aufräumen der temporären HDR-Dateien nach dem Stitchen. false = Dateien behalten"
         },
         "PANO": {
             "_description": "Parameter für das automatische Panorama.",
-            "IMGCOUNT": "Wie viele Fotos rundum aufgenommen werden (z. B. 4 = alle 90°).",
-            "PANO_WIDTH": "Breite des fertigen Panoramas in Pixeln.",
-            "TEMPLATE_DIR": "Ordner mit Hugin-Vorlagen, die die Überlappung der Bilder beschreiben.",
-            "OUTPUT_NAME": "Dateiendung für das Panorama."
+            "IMGCOUNT": "Wie viele Fotos rundum aufgenommen werden (z. B. 4 = alle 90°). Standard: 4 Bilder",
+            "PANO_WIDTH": "Breite des fertigen Panoramas in Pixeln. 3600px = hohe Auflösung",
+            "TEMPLATE_DIR": "Ordner mit Hugin-Vorlagen, die die Überlappung der Bilder beschreiben. 'hugin' Ordner",
+            "OUTPUT_NAME": "Dateiendung für das Panorama. '_blended_fused.jpg' = finales Panorama-Bild"
         },
         "3D": {
             "_description": "Voreinstellungen für die Punktwolken-Dateien.",
-            "Y_OFFSET": "Seitliche Verschiebung des LiDAR in Millimetern relativ zum Drehzentrum.",
-            "Z_OFFSET": "Höhenunterschied zwischen LiDAR und Plattform in Millimetern.",
-            "NORMAL_RADIUS": "Suchradius für Normalenberechnung (gibt dem Filter Infos über Nachbarn).",
-            "SCALE": "Faktor zur Umrechnung von Millimetern in Meter (0.001 = aus mm werden m).",
-            "EXT": "Dateiformat der Punktwolken. 'ply' ist weit verbreitet.",
-            "ASCII": "true = PLY im Textformat (größer, aber lesbar). false = binär (kleiner und schneller).",
-            "INTENSITY_SUFFIX": "Namenszusatz der Punktwolke mit Intensitätsfarben.",
-            "COLOR_SUFFIX": "Namenszusatz der farbigen Punktwolke mit Panorama.",
+            "Y_OFFSET": "Seitliche Verschiebung des LiDAR in Millimetern relativ zum Drehzentrum. -37.5mm = LiDAR-Position",
+            "Z_OFFSET": "Höhenunterschied zwischen LiDAR und Plattform in Millimetern. -41.9mm = Höhenkorrektur",
+            "NORMAL_RADIUS": "Suchradius für Normalenberechnung (gibt dem Filter Infos über Nachbarn). 30mm Radius",
+            "SCALE": "Faktor zur Umrechnung von Millimetern in Meter (0.001 = aus mm werden m). Standard-Skalierung",
+            "EXT": "Dateiformat der Punktwolken. 'ply' ist weit verbreitet und von vielen 3D-Programmen unterstützt",
+            "ASCII": "true = PLY im Textformat (größer, aber lesbar). false = binär (kleiner und schneller)",
+            "INTENSITY_SUFFIX": "Namenszusatz der Punktwolke mit Intensitätsfarben. '_intensity' = Graustufen nach Reflexion",
+            "COLOR_SUFFIX": "Namenszusatz der farbigen Punktwolke mit Panorama. '_vertex' = RGB-Farben aus Kamerabildern",
             "_note": "Offsets und Skalierung müssen nur angepasst werden, wenn der Sensor mechanisch anders montiert ist."
         },
         "FILTERING": {
             "_description": "Optionale Nachbearbeitung, um Ausreißer zu entfernen.",
-            "FILTER_ON_PI": "true = Filter auch auf dem Raspberry Pi ausführen (langsamer). false = Filter überspringen.",
-            "VOXEL_SIZE": "Kantenlänge der vereinfachenden Würfel in Metern. Größere Werte = grobere Punktwolke.",
-            "NB_POINTS": "Wie viele Nachbarn für die Ausreißerprüfung gezählt werden.",
-            "RADIUS": "Umkreis in Metern, in dem Nachbarn gesucht werden.",
+            "FILTER_ON_PI": "true = Filter auch auf dem Raspberry Pi ausführen (langsamer). false = Filter überspringen (empfohlen)",
+            "VOXEL_SIZE": "Kantenlänge der vereinfachenden Würfel in Metern. 0.05m = 5cm-Raster für Vereinfachung",
+            "NB_POINTS": "Wie viele Nachbarn für die Ausreißerprüfung gezählt werden. 20 = ausreichend für Stabilität",
+            "RADIUS": "Umkreis in Metern, in dem Nachbarn gesucht werden. 0.5m = 50cm Suchradius",
             "_tip": "Nur ändern, wenn die Punktwolke stark rauscht."
         },
         "VERTEXCOLOUR": {
             "_description": "Steuert die Übertragung der Panorama-Farben auf die Punktwolke.",
-            "SCALE": "Faktor zur Anpassung der Panorama-Bildgröße. 0.5 = halbiert die Auflösung für schnellere Verarbeitung.",
-            "Z_ROTATE": "Dreht das Panorama in Grad, falls die erste Aufnahme nicht exakt nach vorne zeigt."
+            "SCALE": "Faktor zur Anpassung der Panorama-Bildgröße. 0.5 = halbiert die Auflösung für schnellere Verarbeitung",
+            "Z_ROTATE": "Dreht das Panorama in Grad, falls die erste Aufnahme nicht exakt nach vorne zeigt. 0.0° = keine Drehung"
         },
         "MESH": {
             "_description": "Vorbereitung für eine optionale Flächenrekonstruktion (Mesh).",
             "POISSON": {
-                "depth": "Detailstufe des Poisson-Rekonstruktionsalgorithmus. Höher = feinere Details, aber mehr Rechenzeit.",
-                "k": "Anzahl der Nachbarn, die für die Normalen geschätzt werden.",
-                "estimate_normals": "true = fehlende Normalen vorab berechnen.",
-                "density_threshold": "Untergrenze, ab der dünn besetzte Bereiche weggelassen werden."
+                "depth": "Detailstufe des Poisson-Rekonstruktionsalgorithmus. 11 = hohe Detailstufe, mehr Rechenzeit",
+                "k": "Anzahl der Nachbarn, die für die Normalen geschätzt werden. 50 = gute Balance",
+                "estimate_normals": "true = fehlende Normalen vorab berechnen (empfohlen)",
+                "density_threshold": "Untergrenze, ab der dünn besetzte Bereiche weggelassen werden. 0.1 = 10% Schwelle"
             }
         },
         "REGISTRATION": {
@@ -125,6 +125,12 @@
                 "max_iterations": "Schritte für die Feinregistrierung."
             }
         }
+    },
+
+    "_CONFIG_VALUES": {
+        "_note": "Folgende Abschnitte enthalten die tatsächlichen Konfigurationswerte",
+        "_structure": "Jeder Wert entspricht der Dokumentation oben in DOCS",
+        "_modification": "Werte können über das GUI oder direkt hier geändert werden"
     },
 
     "ENABLE_LIDAR": true,
@@ -153,7 +159,7 @@
         "POWER_PIN": 23,
         "MOTOR_START_COMMAND": "1",
         "MOTOR_STOP_COMMAND": "0",
-        "TARGET_RES": "1/6",
+        "TARGET_RES": "1/12",
         "TARGET_SPEED": 10,
         "RAW_NAME": "_lidar.pkl",
         "protocol": {
