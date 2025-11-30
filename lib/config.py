@@ -142,11 +142,15 @@ class Config:
             self.set(False, "LIDAR", "GPIO_SERIAL", "ENABLE")
 
 
-    def get(self, *args):
+    def get(self, *args, default=None):
+        """Get nested config value with optional default."""
         value = self.dict
-        for key in args:
-            value = value[key]
-        return value
+        try:
+            for key in args:
+                value = value[key]
+            return value
+        except (KeyError, TypeError):
+            return default
     
     def set(self, value, *args):
         d = self.dict

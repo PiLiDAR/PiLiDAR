@@ -102,7 +102,10 @@
         "FILTER_ON_PI": false,
         "VOXEL_SIZE": 0.05,
         "NB_POINTS": 20,
-        "RADIUS": 0.5
+        "RADIUS": 0.5,
+        "STATISTICAL_OUTLIER_REMOVAL": true,
+        "STATISTICAL_K_NEIGHBORS": 20,
+        "STATISTICAL_STD_RATIO": 2.0
     },
 
     "VERTEXCOLOUR": {

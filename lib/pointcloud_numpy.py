@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 import cv2
 from scipy.spatial.transform import Rotation as R
+from scipy.spatial import cKDTree
 
 
 def load_raw_scan(path):
@@ -14,6 +15,63 @@ def load_raw_scan(path):
 
 def remove_NaN(array):
     return array[~np.isnan(array).any(axis=1)]
+
+
+def remove_statistical_outliers(points: np.ndarray, k_neighbors: int = 20, std_ratio: float = 2.0) -> tuple:
+    """
+    Remove statistical outliers using k-nearest neighbors analysis (NumPy implementation).
+    
+    This function computes the mean distance from each point to its k nearest neighbors,
+    then removes points whose mean distance exceeds mean + std_ratio * std_dev.
+    
+    Args:
+        points: Nx3 or Nx4 numpy array of 3D points (optionally with intensity)
+        k_neighbors: Number of nearest neighbors to consider (default: 20)
+        std_ratio: Standard deviation multiplier for threshold (default: 2.0)
+    
+    Returns:
+        Tuple of (filtered_points, inlier_mask)
+        - filtered_points: Points that are not outliers
+        - inlier_mask: Boolean mask indicating which points are inliers
+    
+    Example:
+        >>> points = np.random.rand(1000, 3)
+        >>> filtered, mask = remove_statistical_outliers(points, k_neighbors=20, std_ratio=2.0)
+        >>> print(f"Removed {(~mask).sum()} outliers from {len(points)} points")
+    """
+    if points.shape[0] < k_neighbors:
+        print(f"Warning: Point cloud has {points.shape[0]} points but k_neighbors={k_neighbors}. Skipping outlier removal.")
+        return points, np.ones(points.shape[0], dtype=bool)
+    
+    # Extract XYZ coordinates (ignore intensity if present)
+    coords = points[:, :3]
+    
+    # Build KD-tree for fast nearest neighbor search
+    tree = cKDTree(coords)
+    
+    # Query k+1 nearest neighbors (includes the point itself)
+    distances, _ = tree.query(coords, k=k_neighbors + 1)
+    
+    # Compute mean distance to k neighbors (exclude distance 0 to self)
+    mean_distances = np.mean(distances[:, 1:], axis=1)
+    
+    # Compute global statistics
+    global_mean = np.mean(mean_distances)
+    global_std = np.std(mean_distances)
+    
+    # Threshold: mean + std_ratio * std
+    threshold = global_mean + std_ratio * global_std
+    
+    # Inliers are points below threshold
+    inlier_mask = mean_distances < threshold
+    
+    num_outliers = (~inlier_mask).sum()
+    outlier_percent = (num_outliers / len(points)) * 100
+    
+    print(f"Statistical outlier removal: {num_outliers} outliers ({outlier_percent:.2f}%) removed")
+    print(f"  k_neighbors={k_neighbors}, std_ratio={std_ratio}, threshold={threshold:.4f}")
+    
+    return points[inlier_mask], inlier_mask
 
 
 def rotate_3D(points3d, rotation_degrees, translation_vector=(0, 0, 0), rotation_axis=(0, 0, 1)):
@@ -215,6 +273,12 @@ def process_raw(config, save=True):
     if pts_removed > 0:
         print(f"Filtered out {pts_removed} invalid/extreme points ({pts_removed/array_3D.shape[0]*100:.2f}%)")
     array_3D = array_3D_clean
+
+    # Statistical outlier removal (NumPy backend)
+    if config.get("FILTERING", "STATISTICAL_OUTLIER_REMOVAL", default=False):
+        k_neighbors = config.get("FILTERING", "STATISTICAL_K_NEIGHBORS", default=20)
+        std_ratio = config.get("FILTERING", "STATISTICAL_STD_RATIO", default=2.0)
+        array_3D, _ = remove_statistical_outliers(array_3D, k_neighbors=k_neighbors, std_ratio=std_ratio)
 
     # Colors: pano texture mapping or intensity fallback
     colors_uint8 = None

@@ -85,6 +85,25 @@ HTML_TEMPLATE = '''
             width: 200px;
             vertical-align: middle;
         }
+        .metric {
+            text-align: center;
+        }
+        .metric-label {
+            font-size: 11px;
+            color: #999;
+            margin-bottom: 5px;
+        }
+        .metric-value {
+            font-size: 16px;
+            color: #fff;
+        }
+        #quality-panel h3 {
+            cursor: pointer;
+            user-select: none;
+        }
+        #quality-panel h3:hover {
+            color: #4CAF50;
+        }
     </style>
 </head>
 <body>
@@ -92,6 +111,7 @@ HTML_TEMPLATE = '''
         <span class="info">Points: <span id="point-count">0</span></span>
         <span class="info">Z-Angle: <span id="z-angle">0.0</span>°</span>
         <span class="info">Buffer: <span id="buffer-size">0</span></span>
+        <span class="info">Quality: <span id="quality-score" style="font-weight: bold;">0</span>/100</span>
         <button onclick="clearPlot()">Clear</button>
         <div class="slider-container">
             <label>Max Range: <span id="range-value">{{ max_distance }}</span>m</label>
@@ -99,6 +119,35 @@ HTML_TEMPLATE = '''
                    oninput="updateRange(this.value)">
         </div>
         <button class="danger" onclick="stopServer()">Stop Server</button>
+    </div>
+    <div id="quality-panel" style="background: #2a2a2a; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none;">
+        <h3 style="margin: 0 0 10px 0; font-size: 16px;">Scan Quality Metrics</h3>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+            <div class="metric">
+                <div class="metric-label">Point Density</div>
+                <div class="metric-value"><span id="metric-density">0</span> pts/deg</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Coverage</div>
+                <div class="metric-value"><span id="metric-coverage">0</span>%</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Noise Level</div>
+                <div class="metric-value"><span id="metric-noise">0</span> mm</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Avg Intensity</div>
+                <div class="metric-value"><span id="metric-intensity">0</span></div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Valid Points</div>
+                <div class="metric-value"><span id="metric-valid">0</span></div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Quality Score</div>
+                <div class="metric-value" id="quality-indicator" style="font-weight: bold; font-size: 18px;"><span id="metric-quality">0</span>/100</div>
+            </div>
+        </div>
     </div>
     <div id="plot"></div>
 
@@ -169,6 +218,32 @@ HTML_TEMPLATE = '''
                 document.getElementById('z-angle').textContent = zAngle.toFixed(2);
                 document.getElementById('buffer-size').textContent = bufferSize;
                 
+                // Update quality metrics
+                const quality = jsonData.quality;
+                const qualityScore = Math.round(quality.quality_score);
+                document.getElementById('quality-score').textContent = qualityScore;
+                
+                // Show quality panel when data is available
+                if (bufferSize > 100) {
+                    document.getElementById('quality-panel').style.display = 'block';
+                    document.getElementById('metric-density').textContent = quality.point_density.toFixed(1);
+                    document.getElementById('metric-coverage').textContent = quality.coverage_percent.toFixed(1);
+                    document.getElementById('metric-noise').textContent = quality.noise_level.toFixed(1);
+                    document.getElementById('metric-intensity').textContent = Math.round(quality.avg_intensity);
+                    document.getElementById('metric-valid').textContent = quality.valid_points;
+                    document.getElementById('metric-quality').textContent = qualityScore;
+                    
+                    // Color code quality score
+                    const indicator = document.getElementById('quality-indicator');
+                    if (qualityScore >= 80) {
+                        indicator.style.color = '#4CAF50';  // Green
+                    } else if (qualityScore >= 60) {
+                        indicator.style.color = '#ff9800';  // Orange
+                    } else {
+                        indicator.style.color = '#f44336';  // Red
+                    }
+                }
+                
             } catch (error) {
                 console.error('Update error:', error);
             }
@@ -205,7 +280,7 @@ HTML_TEMPLATE = '''
 
 
 class WebLidarView:
-    """Web-based LiDAR visualization using Flask."""
+    """Web-based LiDAR visualization using Flask with quality metrics."""
     
     def __init__(self, max_distance=6000, max_points=5000):
         self.max_distance = max_distance
@@ -221,6 +296,16 @@ class WebLidarView:
         self.lock = threading.Lock()
         self.running = True
         
+        # Quality metrics
+        self.quality_metrics = {
+            'point_density': 0.0,      # points per degree
+            'coverage_percent': 0.0,    # percentage of 180° covered
+            'noise_level': 0.0,         # std dev of distances
+            'avg_intensity': 0.0,       # mean intensity
+            'valid_points': 0,          # points with distance > 0
+            'quality_score': 0.0        # overall 0-100 score
+        }
+        
     def add_point(self, angle_deg, distance_mm, intensity=None):
         """Add a new LiDAR measurement point."""
         if distance_mm > 0:
@@ -234,6 +319,55 @@ class WebLidarView:
         """Update current z-axis rotation angle."""
         with self.lock:
             self.current_z_angle = z_angle
+            self._calculate_quality_metrics()
+    
+    def _calculate_quality_metrics(self):
+        """Calculate scan quality metrics from current buffer."""
+        if len(self.distances) < 10:
+            return
+        
+        # Convert to numpy for faster computation
+        angles_arr = np.array(list(self.angles))
+        distances_arr = np.array(list(self.distances))
+        intensities_arr = np.array(list(self.intensities))
+        
+        # Valid points (distance > 0 and < max_distance)
+        valid_mask = (distances_arr > 0) & (distances_arr < self.max_distance)
+        valid_distances = distances_arr[valid_mask]
+        valid_intensities = intensities_arr[valid_mask]
+        
+        self.quality_metrics['valid_points'] = int(np.sum(valid_mask))
+        
+        if len(valid_distances) == 0:
+            return
+        
+        # Point density: points per degree
+        angle_range = np.max(angles_arr) - np.min(angles_arr)
+        if angle_range > 0:
+            self.quality_metrics['point_density'] = float(len(valid_distances) / angle_range)
+        
+        # Coverage: percentage of 180° covered with data
+        # Discretize into 1° bins
+        bins = np.arange(0, 181, 1)
+        hist, _ = np.histogram(angles_arr[valid_mask], bins=bins)
+        covered_bins = np.sum(hist > 0)
+        self.quality_metrics['coverage_percent'] = float((covered_bins / 180) * 100)
+        
+        # Noise level: standard deviation of distances (lower is better)
+        self.quality_metrics['noise_level'] = float(np.std(valid_distances))
+        
+        # Average intensity
+        self.quality_metrics['avg_intensity'] = float(np.mean(valid_intensities))
+        
+        # Quality score (0-100)
+        # Factors: density (40%), coverage (40%), low noise (20%)
+        density_score = min(100, (self.quality_metrics['point_density'] / 50) * 100)  # 50 pts/deg = 100%
+        coverage_score = self.quality_metrics['coverage_percent']
+        noise_score = max(0, 100 - (self.quality_metrics['noise_level'] / 10))  # <100mm noise = 90%+
+        
+        self.quality_metrics['quality_score'] = float(
+            0.4 * density_score + 0.4 * coverage_score + 0.2 * noise_score
+        )
     
     def get_data(self):
         """Get current data for web display."""
@@ -244,7 +378,15 @@ class WebLidarView:
                 'intensities': [int(i) for i in self.intensities],
                 'point_count': int(self.point_count),
                 'buffer_size': len(self.angles),
-                'z_angle': float(self.current_z_angle)
+                'z_angle': float(self.current_z_angle),
+                'quality': {
+                    'point_density': float(self.quality_metrics['point_density']),
+                    'coverage_percent': float(self.quality_metrics['coverage_percent']),
+                    'noise_level': float(self.quality_metrics['noise_level']),
+                    'avg_intensity': float(self.quality_metrics['avg_intensity']),
+                    'valid_points': int(self.quality_metrics['valid_points']),
+                    'quality_score': float(self.quality_metrics['quality_score'])
+                }
             }
     
     def clear(self):
