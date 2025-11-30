@@ -1,0 +1,136 @@
+{
+    "ENABLE_LIDAR": true,
+    "ENABLE_CAM": false,
+    "ENABLE_IMU": false,
+
+    "ENABLE_PANO": true,
+    "ENABLE_3D": true,
+
+    "ENABLE_VERTEXCOLOUR": false,
+    "ENABLE_FILTERING": false,
+    
+    "SCANS_ROOT": "scans",
+    "ANGULAR_DIGITS": 3,
+    
+    "LIDAR": {
+        "DEVICE": "STL27L",
+        "STL27L": {
+            "PORT_WIN": "COM3",
+            "PORT": "/dev/ttyUSB0",
+            "BAUDRATE": 921600,
+            "SAMPLING_RATE": 21600,
+            "OUT_LEN": 180,
+            "OFFSET": 0,
+            "PWM_COEFFS": null
+        },
+        "GPIO_SERIAL": {
+            "ENABLE": false,
+            "PORT": "/dev/ttyS0",
+            "PWM_CHANNEL": 0,
+            "PWM_FREQ": 30000
+        },
+        "LIDAR_OFFSET_ANGLE": -1.05,
+        "TARGET_RES": "1/6",
+        "TARGET_SPEED": 10,
+        "RAW_NAME": "_lidar.pkl",
+        "protocol": {
+            "start_byte": "54",
+            "dlength_byte": "2c",
+            "dlength": 12,
+            "package_len": 47,
+            "CRC_PATH": "lib/CRC.json",
+            "CRC_TABLE": null
+        }
+    },
+
+    "STEPPER": {
+        "pins": {
+            "DIR_PIN": 26,
+            "STEP_PIN": 19,
+            "MS_PINS": [5, 6, 13]
+        },
+        "RELAY_PIN": 24,
+        "SCAN_ANGLE": 180,
+        "GEAR_RATIO": "1 + 38/14",
+        "MICROSTEPS": 16,
+        "STEP_DELAY": 0.0005,
+        "SCAN_DELAY": 0.08,
+        "STEPPER_RES": 200,
+        "STEP_ANGLE": null
+    },
+
+    "CAM": {
+        "preview_dims": [320, 240],
+        "dims": [4056,3040],
+        "preview_denoise": "cdn_off",
+        "denoise": "cdn_fast",
+        "awbgains": [1, 1],
+        "max_iterations": 10,
+        "awb_thres": 0.01,
+        "set_gain": 1,
+        "sharpness": 0.5,
+        "saturation": 0.8,
+        "AEB": 1,
+        "AEB_STOPS": 2,
+        "raw": false,
+        "remove_tmp": false
+    },
+
+    "IMU": {
+        "i2c_bus": 3, 
+        "device_address": 104,
+        "frequency": 50
+    }, 
+
+    "PANO": {
+        "IMGCOUNT": 4,
+        "PANO_WIDTH": 3600,
+        "TEMPLATE_DIR": "hugin",
+        "OUTPUT_NAME": "_blended_fused.jpg"
+    },
+
+    "3D": {
+        "Y_OFFSET": -37.5,
+        "Z_OFFSET": -41.9,
+        "NORMAL_RADIUS": 30,
+        "SCALE": 0.001, 
+        "EXT": "ply",
+        "ASCII": false
+    },
+
+    "FILTERING": {
+        "FILTER_ON_PI": false,
+        "VOXEL_SIZE": 0.05,
+        "NB_POINTS": 20,
+        "RADIUS": 0.5,
+        "STATISTICAL_OUTLIER_REMOVAL": true,
+        "STATISTICAL_K_NEIGHBORS": 20,
+        "STATISTICAL_STD_RATIO": 2.0
+    },
+
+    "VERTEXCOLOUR": {
+        "SCALE": 0.5,
+        "Z_ROTATE": 0.0
+    },
+
+    "MESH": {
+        "POISSON": {
+            "depth": 11,
+            "k": 50,
+            "estimate_normals": true,
+            "density_threshold": 0.1
+        }
+    },
+    
+    "REGISTRATION": {
+        "GLOBAL": {
+            "voxel_size": 0.05,
+            "max_iterations": 1000000,
+            "confidence": 0.9
+            },
+        "ICP": {
+            "size_multiplier": 0.4,
+            "max_iterations": 200
+        }
+    }
+}

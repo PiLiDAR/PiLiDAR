@@ -399,7 +399,7 @@ LIDAR_HTML_TEMPLATE = '''<!DOCTYPE html>
 </head>
 <body>
     <div class="controls">
-        <a href="/" style="color: #4CAF50; text-decoration: none; margin-right: 20px;">← Dashboard</a>
+        <a href="/" style="color: #667eea; text-decoration: none; margin-right: 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">🏠 Dashboard</a>
         <span class="info">Points: <span id="point-count">0</span></span>
         <span class="info">Z-Angle: <span id="z-angle">0.0</span>°</span>
         <span class="info">Buffer: <span id="buffer-size">0</span></span>
@@ -700,7 +700,7 @@ def create_app(web_view: WebLidarView, config_editor: ConfigEditor, config_path:
         </head>
         <body>
             <h1>📂 Scan History</h1>
-            <p><a href="/">← Back to Dashboard</a></p>
+            <p><a href="/" style="color: #667eea; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">🏠 Dashboard</a></p>
             <div>
                 {"".join(f'<div class="scan-item">{d}</div>' for d in scan_dirs) if scan_dirs else "<p>No scans found</p>"}
             </div>
@@ -724,7 +724,7 @@ def create_app(web_view: WebLidarView, config_editor: ConfigEditor, config_path:
         </head>
         <body>
             <h1>💻 System Monitor</h1>
-            <p><a href="/">← Back to Dashboard</a></p>
+            <p><a href="/" style="color: #667eea; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">🏠 Dashboard</a></p>
             <div class="metric">
                 <h3>CPU Temperature</h3>
                 <p id="cpu-temp">Loading...</p>

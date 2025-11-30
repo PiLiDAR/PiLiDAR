@@ -353,6 +353,9 @@ HTML_TEMPLATE = '''
 <body>
     <div class="container">
         <header>
+            <div style="text-align: left; margin-bottom: 10px;">
+                <a href="/" style="color: white; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; opacity: 0.9;">🏠 Dashboard</a>
+            </div>
             <h1>🔧 PiLiDAR Configuration Editor</h1>
             <div class="subtitle">Web-based configuration management for Version 0.9.1-beta</div>
         </header>
