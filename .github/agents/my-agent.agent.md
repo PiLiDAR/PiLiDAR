@@ -52,8 +52,7 @@ PiLiDAR/
 │   ├── rpicam_utils.py     # Camera HDR capture
 │   └── pano_utils.py       # Hugin panorama stitching
 ├── tools/
-│   ├── live_view_2d.py     # Matplotlib local visualization
-│   ├── live_view_web.py    # Flask web interface (NEW v0.9)
+│   ├── live_view_web.py    # Flask web interface (v0.9)
 │   └── plausibility_check.py
 └── scans/                  # Output directory
     └── YYMMDD-HHMM/
@@ -65,18 +64,14 @@ PiLiDAR/
 ## Key Features (v0.9-beta)
 
 ### Live Visualization
-1. **Web Interface** (`tools/live_view_web.py`):
-   - Flask server on port 5000
-   - Plotly.js interactive polar plots
-   - SSH-compatible (no X11 required)
-   - Access: `http://192.168.0.70:5000`
-   - 20 FPS real-time updates
-   - Dual-thread architecture: serial reader + buffer monitor
-
-2. **Local Matplotlib View** (`tools/live_view_2d.py`):
-   - TkAgg backend for desktop use
-   - Keyboard controls: `+/-` zoom, `r` reset, `q` quit
-   - Thread-safe buffer updates
+**Web Interface** (`tools/live_view_web.py`):
+- Flask server on port 5000
+- Plotly.js interactive polar plots
+- SSH-compatible (no X11 required)
+- Access: `http://192.168.0.70:5000`
+- 20 FPS real-time updates
+- Dual-thread architecture: serial reader + buffer monitor
+- Browser controls: Clear data, stop server, zoom/pan
 
 ### 3D Processing Pipeline
 - **Coordinate System**: 
@@ -97,9 +92,6 @@ PiLiDAR/
 ```bash
 # Full 3D scan (camera + LiDAR)
 python PiLiDAR.py
-
-# Live visualization (local, requires X11)
-python tools/live_view_2d.py --max-distance 5.0
 
 # Live visualization (web, SSH-compatible)
 python tools/live_view_web.py --max-distance 5.0 --port 5000
@@ -135,7 +127,7 @@ pip install -r requirements.txt
 | Problem | Solution |
 |---------|----------|
 | Open3D segfaults | Use `pointcloud_numpy.py` NumPy-only pipeline |
-| Matplotlib gray window over SSH | Use `live_view_web.py` Flask interface |
+| SSH without X11 forwarding | Use `live_view_web.py` Flask interface (port 5000) |
 | Stepper motor overheating | Auto power-off via relay (GPIO 24) |
 | Y-axis mirrored | Apply offset then invert: `y -= Y_OFFSET; y *= -1` |
 | JSON serialization errors | Convert NumPy types: `[float(x) for x in array]` |
@@ -151,11 +143,12 @@ pip install -r requirements.txt
 
 ## Recent Updates (v0.9-beta)
 
-- ✅ Added dual live visualization tools (web + local)
-- ✅ Implemented stepper motor auto power-off
+- ✅ Web-based live visualization (Flask + Plotly.js)
+- ✅ SSH-compatible monitoring (no X11 required)
+- ✅ Dual-thread streaming architecture (20 FPS)
+- ✅ Stepper motor auto power-off via relay
 - ✅ Fixed Y/Z axis inversions with corrected offsets
 - ✅ Optimized for Pi5 with NumPy-only backend
-- ✅ Flask web server for SSH-compatible monitoring
 - ✅ Thread-safe real-time data streaming
 - ✅ CloudCompare-compatible ASCII PLY export
 
