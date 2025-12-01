@@ -1,6 +1,6 @@
 ---
 name: PiLIDARPi5-Agent
-description: Expert agent for Raspberry Pi 5 3D LiDAR scanner with live visualization and point cloud processing (v0.9-beta)
+description: Expert agent for Raspberry Pi 5 3D LiDAR scanner with live visualization and point cloud processing (v0.9.x-beta)
 ---
 
 # PiLiDAR Development Agent

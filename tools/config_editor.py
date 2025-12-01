@@ -374,6 +374,7 @@ HTML_TEMPLATE = '''
                 <button class="btn-primary" onclick="saveConfig()">💾 Save Changes</button>
                 <button class="btn-secondary" onclick="reloadConfig()">🔄 Reload</button>
                 <button class="btn-warning" onclick="openCalibrationWizard()">📐 Calibration Wizard</button>
+                <button class="btn-danger" onclick="resetToDefaults()">⚠️ Reset to Defaults</button>
             </div>
             <div class="status" id="status">Ready</div>
         </div>
@@ -469,6 +470,71 @@ HTML_TEMPLATE = '''
         let originalConfig = {};
         let currentWizardStep = 1;
         
+        // Default configuration values
+        const defaultConfig = {
+            "ENABLE_LIDAR": true,
+            "ENABLE_CAM": false,
+            "ENABLE_IMU": false,
+            "ENABLE_PANO": true,
+            "ENABLE_3D": true,
+            "ENABLE_VERTEXCOLOUR": false,
+            "ENABLE_FILTERING": false,
+            "LIDAR": {
+                "DEVICE": "/dev/ttyUSB0",
+                "LIDAR_OFFSET_ANGLE": -1.05,
+                "TARGET_RES": "1/6",
+                "TARGET_SPEED": 10
+            },
+            "STEPPER": {
+                "SCAN_ANGLE": 180,
+                "GEAR_RATIO": "1 + 38/14",
+                "MICROSTEPS": 16,
+                "STEP_DELAY": 0.0005,
+                "SCAN_DELAY": 0.08,
+                "IDLE_OFF_DELAY": 10,
+                "RELAY_PIN": 24,
+                "pins": {
+                    "DIR_PIN": 26,
+                    "STEP_PIN": 19,
+                    "MS_PINS": [5, 6, 13]
+                }
+            },
+            "CAM": {
+                "preview_dims": [320, 240],
+                "dims": [4056, 3040],
+                "sharpness": 0.5,
+                "saturation": 0.8,
+                "AEB": 1,
+                "AEB_STOPS": 2,
+                "denoise": "cdn_fast",
+                "raw": false
+            },
+            "PANO": {
+                "IMGCOUNT": 4,
+                "PANO_WIDTH": 3600
+            },
+            "3D": {
+                "Y_OFFSET": -37.5,
+                "Z_OFFSET": -41.9,
+                "NORMAL_RADIUS": 30,
+                "SCALE": 0.001,
+                "EXT": "ply",
+                "ASCII": false,
+                "INVERT_X": false,
+                "INVERT_Y": false,
+                "INVERT_Z": false
+            },
+            "FILTERING": {
+                "FILTER_ON_PI": false,
+                "VOXEL_SIZE": 0.05,
+                "NB_POINTS": 20,
+                "RADIUS": 0.5,
+                "STATISTICAL_OUTLIER_REMOVAL": false,
+                "STATISTICAL_K_NEIGHBORS": 20,
+                "STATISTICAL_STD_RATIO": 2
+            }
+        };
+        
         // Field descriptions for tooltips
         const fieldDescriptions = {
             // General
@@ -487,11 +553,18 @@ HTML_TEMPLATE = '''
             'LIDAR.TARGET_SPEED': 'LiDAR motor rotation speed (Hz)',
             
             // Stepper Motor
-            'STEPPER.SCAN_ANGLE': 'Total vertical scan angle range (degrees, max 180°)',
+            'STEPPER.SCAN_ANGLE': 'Total vertical scan angle range (degrees, max 180 degrees)',
             'STEPPER.GEAR_RATIO': 'Mechanical gear ratio between motor and scanner head',
             'STEPPER.MICROSTEPS': 'Microstepping mode: 1=full, 2=half, 4=quarter, 8=eighth, 16=sixteenth step',
             'STEPPER.STEP_DELAY': 'Delay between motor steps in seconds - lower = faster but may skip steps',
             'STEPPER.SCAN_DELAY': 'Stabilization delay after motor movement (seconds)',
+            'STEPPER.IDLE_OFF_DELAY': 'Seconds of idle time before automatically powering off motor (default: 10)',
+            'STEPPER.RELAY_PIN': 'GPIO pin for relay control (motor power management)',
+            
+            // GPIO Pins
+            'STEPPER.pins.DIR_PIN': 'GPIO pin for stepper motor direction control',
+            'STEPPER.pins.STEP_PIN': 'GPIO pin for stepper motor step signal',
+            'STEPPER.pins.MS_PINS': 'GPIO pins for microstepping mode selection [MS1, MS2, MS3]',
             
             // Camera
             'CAM.preview_dims': 'Preview image dimensions [width, height] for focusing',
@@ -512,49 +585,55 @@ HTML_TEMPLATE = '''
             '3D.SCALE': 'Coordinate scaling factor (1.0 = millimeters)',
             '3D.EXT': 'Output file format: ply, xyz, or pcd',
             '3D.ASCII': 'Save as ASCII text format (true) or binary (false)',
+            '3D.INVERT_X': 'Invert X axis (default: off). X is horizontal (right).',
+            '3D.INVERT_Y': 'Invert Y axis (default: off). Y is horizontal depth.',
+            '3D.INVERT_Z': 'Invert Z axis (default: off). Z is vertical.',
             
             // Filtering
             'FILTERING.FILTER_ON_PI': 'Apply outlier filtering on Raspberry Pi (vs post-processing)',
             'FILTERING.VOXEL_SIZE': 'Voxel grid downsampling resolution (mm, 0=disabled)',
             'FILTERING.NB_POINTS': 'Minimum neighbors for statistical outlier removal (typical: 20)',
             'FILTERING.RADIUS': 'Search radius for neighbor detection (mm)',
-            
-            // GPIO
-            'PORT': 'LiDAR serial port device path',
-            'BAUDRATE': 'Serial communication baud rate (must match LiDAR: 230400)',
-            'DIR': 'GPIO pin for stepper motor direction control',
-            'STEP': 'GPIO pin for stepper motor step signal',
-            'MS': 'GPIO pins for microstepping mode selection [MS1, MS2, MS3]',
-            'RELAY': 'GPIO pin for relay control (motor power management)',
-            
-            // Statistical Outlier Removal (new P0 features)
-            'STATISTICAL_OUTLIER_REMOVAL': 'Enable advanced k-nearest neighbors outlier removal',
-            'STATISTICAL_K_NEIGHBORS': 'Number of nearest neighbors to analyze (default: 20)',
-            'STATISTICAL_STD_RATIO': 'Standard deviation threshold multiplier (default: 2.0)'
+            'FILTERING.STATISTICAL_OUTLIER_REMOVAL': 'Enable advanced k-nearest neighbors outlier removal',
+            'FILTERING.STATISTICAL_K_NEIGHBORS': 'Number of nearest neighbors to analyze (default: 20)',
+            'FILTERING.STATISTICAL_STD_RATIO': 'Standard deviation threshold multiplier (default: 2.0)'
         };
 
         // Load configuration on page load
         window.onload = function() {
+            console.log('Page loaded, starting config load...');
             loadConfig();
         };
 
         async function loadConfig() {
+            console.log('loadConfig() called');
             try {
+                console.log('Fetching /api/config...');
                 const response = await fetch('/api/config');
+                console.log('Response received:', response.status);
                 const data = await response.json();
+                console.log('Data parsed:', Object.keys(data));
                 config = data.config;
+                console.log('Config assigned, keys:', Object.keys(config));
                 originalConfig = JSON.parse(JSON.stringify(config));
+                console.log('About to render form...');
                 renderFormEditor();
                 updateJsonEditor();
                 updateStatus('Ready', 'success');
             } catch (error) {
+                console.error('Error in loadConfig:', error);
                 updateStatus('Error loading config: ' + error.message, 'error');
             }
         }
 
         function renderFormEditor() {
             const container = document.getElementById('form-editor');
+            if (!container) {
+                console.error('form-editor container not found!');
+                return;
+            }
             container.innerHTML = '';
+            console.log('Rendering form editor, config:', config);
 
             // Define sections with their fields
             const sections = {
@@ -565,7 +644,11 @@ HTML_TEMPLATE = '''
                 },
                 'Stepper Motor': {
                     parent: 'STEPPER',
-                    fields: ['SCAN_ANGLE', 'GEAR_RATIO', 'MICROSTEPS', 'STEP_DELAY', 'SCAN_DELAY']
+                    fields: ['SCAN_ANGLE', 'GEAR_RATIO', 'MICROSTEPS', 'STEP_DELAY', 'SCAN_DELAY', 'IDLE_OFF_DELAY', 'RELAY_PIN']
+                },
+                'GPIO Pins': {
+                    parent: 'STEPPER.pins',
+                    fields: ['DIR_PIN', 'STEP_PIN', 'MS_PINS']
                 },
                 'Camera Settings': {
                     parent: 'CAM',
@@ -579,9 +662,13 @@ HTML_TEMPLATE = '''
                     parent: '3D',
                     fields: ['Y_OFFSET', 'Z_OFFSET', 'NORMAL_RADIUS', 'SCALE', 'EXT', 'ASCII']
                 },
+                'Axis Inversion': {
+                    parent: '3D',
+                    fields: ['INVERT_X', 'INVERT_Y', 'INVERT_Z']
+                },
                 'Filtering': {
                     parent: 'FILTERING',
-                    fields: ['FILTER_ON_PI', 'VOXEL_SIZE', 'NB_POINTS', 'RADIUS']
+                    fields: ['FILTER_ON_PI', 'VOXEL_SIZE', 'NB_POINTS', 'RADIUS', 'STATISTICAL_OUTLIER_REMOVAL', 'STATISTICAL_K_NEIGHBORS', 'STATISTICAL_STD_RATIO']
                 }
             };
 
@@ -608,15 +695,51 @@ HTML_TEMPLATE = '''
                 }
 
                 fields.forEach(field => {
-                    const value = parent ? config[parent]?.[field] : config[field];
-                    if (value !== undefined) {
-                        content.appendChild(createField(field, value, parent));
+                    // Handle nested paths like "STEPPER.pins"
+                    let value;
+                    try {
+                        if (parent) {
+                            const parentParts = parent.split('.');
+                            let obj = config;
+                            let defaultObj = defaultConfig;
+                            
+                            // Navigate to parent object
+                            for (const part of parentParts) {
+                                if (!obj[part]) obj[part] = {};
+                                obj = obj[part];
+                                if (defaultObj && defaultObj[part]) {
+                                    defaultObj = defaultObj[part];
+                                } else {
+                                    defaultObj = null;
+                                }
+                            }
+                            value = obj[field];
+                            
+                            // Use default value if current config doesn't have this field
+                            if (value === undefined && defaultObj && defaultObj[field] !== undefined) {
+                                value = defaultObj[field];
+                                obj[field] = value;
+                            }
+                        } else {
+                            value = config[field];
+                            if (value === undefined && defaultConfig[field] !== undefined) {
+                                value = defaultConfig[field];
+                                config[field] = value;
+                            }
+                        }
+                        
+                        if (value !== undefined) {
+                            content.appendChild(createField(field, value, parent));
+                        }
+                    } catch (error) {
+                        console.error(`Error processing field ${field} in ${parent || 'root'}:`, error);
                     }
                 });
 
                 section.appendChild(content);
                 container.appendChild(section);
             }
+            console.log('Form editor rendered successfully, sections:', Object.keys(sections).length);
         }
 
         function createField(name, value, parent) {
@@ -691,12 +814,17 @@ HTML_TEMPLATE = '''
 
         function updateConfigValue(fieldId, value) {
             const parts = fieldId.split('.');
-            if (parts.length === 2) {
-                if (!config[parts[0]]) config[parts[0]] = {};
-                config[parts[0]][parts[1]] = value;
-            } else {
-                config[parts[0]] = value;
+            let obj = config;
+            
+            // Navigate to the parent object
+            for (let i = 0; i < parts.length - 1; i++) {
+                if (!obj[parts[i]]) obj[parts[i]] = {};
+                obj = obj[parts[i]];
             }
+            
+            // Set the value
+            obj[parts[parts.length - 1]] = value;
+            
             updateJsonEditor();
             checkModified();
         }
@@ -855,6 +983,20 @@ HTML_TEMPLATE = '''
             checkModified();
             closeCalibrationWizard();
             updateStatus('Offsets updated - remember to save!', 'modified');
+        }
+
+        function resetToDefaults() {
+            if (!confirm('Reset ALL settings to default values? This will overwrite your current configuration. Make sure you have a backup if needed!')) {
+                return;
+            }
+            
+            // Deep copy default config
+            config = JSON.parse(JSON.stringify(defaultConfig));
+            
+            updateJsonEditor();
+            renderFormEditor();
+            checkModified();
+            updateStatus('All settings reset to defaults - remember to save!', 'modified');
         }
 
         // Handle clicks outside modal

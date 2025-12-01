@@ -23,6 +23,7 @@ import argparse
 import json
 import threading
 import time
+import subprocess
 from collections import deque
 from typing import Any, Dict, Optional, Tuple
 import copy
@@ -33,6 +34,17 @@ from flask import Flask, render_template_string, jsonify, request, redirect, url
 
 from lib.config import Config
 from lib.lidar_driver import Lidar
+
+# Global scan process tracking
+scan_process = None
+scan_status = {
+    'scan_id': None,
+    'status': 'idle',  # idle, running, completed, failed
+    'progress': '',
+    'error': None,
+    'points': 0,
+    'output_dir': None
+}
 
 
 # Main Dashboard HTML
@@ -207,6 +219,17 @@ DASHBOARD_HTML = '''
                 <span class="tool-status status-running" id="lidar-status">● Running</span>
             </div>
 
+            <!-- Start Full Scan -->
+            <div class="tool-card" onclick="startFullScan()" id="scan-card">
+                <div class="tool-icon">🚀</div>
+                <div class="tool-title">Start Full Scan</div>
+                <div class="tool-description">
+                    Execute complete 3D scan workflow: Camera panorama capture, LiDAR scanning, 
+                    stitching, and point cloud generation. Automatic motor control included.
+                </div>
+                <span class="tool-status status-ready" id="scan-status">Ready to Start</span>
+            </div>
+
             <!-- Config Editor -->
             <div class="tool-card" onclick="window.location.href='/config'">
                 <div class="tool-icon">⚙️</div>
@@ -319,6 +342,75 @@ DASHBOARD_HTML = '''
             }
         }
 
+        // Start Full Scan Function
+        async function startFullScan() {
+            const statusElem = document.getElementById('scan-status');
+            
+            if (!confirm('Start complete 3D scan workflow? This will execute: Camera panorama capture, 180° LiDAR scan, stitching, and point cloud generation. Duration: ~3-5 minutes.')) {
+                return;
+            }
+            
+            try {
+                statusElem.textContent = 'Starting scan...';
+                statusElem.style.color = '#ffa500';
+                
+                const response = await fetch('/api/scan/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({})
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    statusElem.textContent = 'Scanning in progress...';
+                    monitorScanProgress(result.scan_id);
+                } else {
+                    statusElem.textContent = 'Error: ' + result.error;
+                    statusElem.style.color = '#ff4444';
+                }
+            } catch (error) {
+                statusElem.textContent = 'Failed to start scan';
+                statusElem.style.color = '#ff4444';
+                console.error('Scan start error:', error);
+            }
+        }
+
+        // Monitor scan progress via polling
+        async function monitorScanProgress(scanId) {
+            const statusElem = document.getElementById('scan-status');
+            
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/scan/status?scan_id=' + scanId);
+                    const data = await response.json();
+                    
+                    if (data.status === 'running') {
+                        statusElem.textContent = 'Scanning... ' + (data.progress || '');
+                        statusElem.style.color = '#ffa500';
+                    } else if (data.status === 'completed') {
+                        clearInterval(pollInterval);
+                        statusElem.textContent = 'Scan Complete! (' + (data.points || 0) + ' points)';
+                        statusElem.style.color = '#44ff44';
+                        setTimeout(() => {
+                            statusElem.textContent = 'Ready to Start';
+                            statusElem.style.color = '#44ff44';
+                        }, 5000);
+                    } else if (data.status === 'failed') {
+                        clearInterval(pollInterval);
+                        statusElem.textContent = 'Scan Failed: ' + (data.error || 'Unknown error');
+                        statusElem.style.color = '#ff4444';
+                        setTimeout(() => {
+                            statusElem.textContent = 'Ready to Start';
+                            statusElem.style.color = '#44ff44';
+                        }, 10000);
+                    }
+                } catch (error) {
+                    console.error('Status poll error:', error);
+                }
+            }, 2000); // Poll every 2 seconds
+        }
+
         // Update on load and every 30 seconds
         updateSystemInfo();
         setInterval(updateSystemInfo, 30000);
@@ -341,10 +433,61 @@ LIDAR_HTML_TEMPLATE = '''<!DOCTYPE html>
             padding: 20px;
             background: #1a1a1a;
             color: #fff;
+            display: flex;
+            gap: 20px;
+        }
+        #plot-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
         }
         #plot {
             width: 100%;
             height: 85vh;
+        }
+        #coord-system {
+            width: 250px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            height: fit-content;
+        }
+        #coord-system h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #667eea;
+        }
+        #coord-canvas {
+            width: 100%;
+            height: 250px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #1a1a1a;
+        }
+        .coord-legend {
+            margin-top: 15px;
+            font-size: 12px;
+            line-height: 1.8;
+        }
+        .coord-legend div {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .coord-legend .color-box {
+            width: 20px;
+            height: 3px;
+            border-radius: 2px;
+        }
+        @media (max-width: 1200px) {
+            body {
+                flex-direction: column;
+            }
+            #coord-system {
+                width: 100%;
+                max-width: 400px;
+                margin: 0 auto;
+            }
         }
         .controls {
             margin-bottom: 20px;
@@ -398,91 +541,108 @@ LIDAR_HTML_TEMPLATE = '''<!DOCTYPE html>
     </style>
 </head>
 <body>
-    <div class="controls">
-        <a href="/" style="color: #667eea; text-decoration: none; margin-right: 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">🏠 Dashboard</a>
-        <span class="info" title="Total number of LiDAR points received since start">Points: <span id="point-count">0</span></span>
-        <span class="info" title="Current vertical angle of the scanner head (stepper motor position)">Z-Angle: <span id="z-angle">0.0</span>°</span>
-        <span class="info" title="Number of points currently displayed in the buffer">Buffer: <span id="buffer-size">0</span></span>
-        <span class="info" title="Overall scan quality score (0-100) based on density, coverage and noise">Quality: <span id="quality-score" style="font-weight: bold;">0</span>/100</span>
-        <span class="info" title="Maximum display distance in meters">Range: <span id="current-range">6.0</span>m</span>
-        <label style="margin-left: 15px; margin-right: 5px;" title="Adjust the maximum distance shown in the plot (1-10 meters)">Max Distance:</label>
-        <input type="range" id="maxDistanceSlider" min="1" max="10" step="0.5" value="6" 
-               style="width: 150px; vertical-align: middle;" 
-               oninput="updateMaxDistance(this.value)">
-        <button onclick="clearPlot()">Clear</button>
+    <div id="plot-container">
+        <div class="controls">
+            <a href="/" style="color: #667eea; text-decoration: none; margin-right: 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">🏠 Dashboard</a>
+            <span class="info" title="Total number of LiDAR points received since start">Points: <span id="point-count">0</span></span>
+            <span class="info" title="Current vertical angle of the scanner head (stepper motor position)">Z-Angle: <span id="z-angle">0.0</span>°</span>
+            <span class="info" title="Number of points currently displayed in the buffer">Buffer: <span id="buffer-size">0</span></span>
+            <span class="info" title="Overall scan quality score (0-100) based on density, coverage and noise">Quality: <span id="quality-score" style="font-weight: bold;">0</span>/100</span>
+            <span class="info" title="Maximum display distance in meters">Range: <span id="current-range">6.0</span>m</span>
+            <label style="margin-left: 15px; margin-right: 5px;" title="Adjust the maximum distance shown in the plot (1-10 meters)">Max Distance:</label>
+            <input type="range" id="maxDistanceSlider" min="1" max="10" step="0.5" value="6" 
+                   style="width: 150px; vertical-align: middle;" 
+                   oninput="updateMaxDistance(this.value)">
+            <button onclick="clearPlot()">Clear</button>
+        </div>
+        <div id="quality-panel">
+            <h3>Scan Quality Metrics</h3>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                <div class="metric">
+                    <div class="metric-label" title="Average number of LiDAR points per degree of angular coverage">Point Density</div>
+                    <div class="metric-value"><span id="metric-density">0</span> pts/deg</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label" title="Percentage of the 180° scan range that contains valid measurements">Coverage</div>
+                    <div class="metric-value"><span id="metric-coverage">0</span>%</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label" title="Standard deviation of distance measurements - lower is better (indicates less noise)">Noise Level</div>
+                    <div class="metric-value"><span id="metric-noise">0</span> mm</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label" title="Average signal intensity of valid measurements (0-255)">Avg Intensity</div>
+                    <div class="metric-value"><span id="metric-intensity">0</span></div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label" title="Number of valid points within the max distance range">Valid Points</div>
+                    <div class="metric-value"><span id="metric-valid">0</span></div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label" title="Overall quality score: 0.4×density + 0.4×coverage + 0.2×noise_inverse">Quality Score</div>
+                    <div class="metric-value" id="quality-indicator" style="font-weight: bold; font-size: 18px;"><span id="metric-quality">0</span>/100</div>
+                </div>
+            </div>
+        </div>
+        <div id="plot"></div>
     </div>
-    <div id="quality-panel">
-        <h3>Scan Quality Metrics</h3>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
-            <div class="metric">
-                <div class="metric-label" title="Average number of LiDAR points per degree of angular coverage">Point Density</div>
-                <div class="metric-value"><span id="metric-density">0</span> pts/deg</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label" title="Percentage of the 180° scan range that contains valid measurements">Coverage</div>
-                <div class="metric-value"><span id="metric-coverage">0</span>%</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label" title="Standard deviation of distance measurements - lower is better (indicates less noise)">Noise Level</div>
-                <div class="metric-value"><span id="metric-noise">0</span> mm</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label" title="Average signal intensity of valid measurements (0-255)">Avg Intensity</div>
-                <div class="metric-value"><span id="metric-intensity">0</span></div>
-            </div>
-            <div class="metric">
-                <div class="metric-label" title="Number of valid points within the max distance range">Valid Points</div>
-                <div class="metric-value"><span id="metric-valid">0</span></div>
-            </div>
-            <div class="metric">
-                <div class="metric-label" title="Overall quality score: 0.4×density + 0.4×coverage + 0.2×noise_inverse">Quality Score</div>
-                <div class="metric-value" id="quality-indicator" style="font-weight: bold; font-size: 18px;"><span id="metric-quality">0</span>/100</div>
+    
+    <div id="coord-system">
+        <h3>3D Coordinate System</h3>
+        <canvas id="coord-canvas"></canvas>
+        <div class="coord-legend">
+            <div><span class="color-box" style="background: #ff6b6b;"></span><b>X-Axis</b> → Right (horizontal)</div>
+            <div><span class="color-box" style="background: #4ecdc4;"></span><b>Y-Axis</b> → Forward (depth, inverted in 3D)</div>
+            <div><span class="color-box" style="background: #95e1d3;"></span><b>Z-Axis</b> → Up (vertical, inverted in 3D)</div>
+            <div style="margin-top: 10px; font-size: 11px; color: #999;">
+                Coordinate convention (matching pointcloud_numpy): X horizontal (right), Y horizontal depth (inverted), Z vertical (inverted). Live view displays the X–Y plane.
             </div>
         </div>
     </div>
-    <div id="plot"></div>
     <script>
         let maxDistance = {{ max_distance }};
         
-        // Coordinate system annotations (arrows showing X/Y axes)
+        // Coordinate system annotations (arrows showing X/Y axes in 2D polar view)
+        // Note: This shows the horizontal plane BEFORE z-angle rotation
+        // In the final 3D point cloud, Y and Z axes are inverted
         const coordSystemAnnotations = [
-            // X-axis arrow (0° direction, right side)
+            // +X axis (0° in polar plot = right side)
             {
                 x: 1.15,
                 y: 0.5,
                 xref: 'paper',
                 yref: 'paper',
-                text: '<b>+X →</b>',
+                text: '<b>+X (0°)</b>',
                 showarrow: false,
                 font: {size: 14, color: '#ff6b6b'}
             },
-            // Y-axis arrow (90° direction, top)
+            // +Y axis (90° in polar plot = top, forward in LiDAR frame)
             {
                 x: 0.5,
                 y: 1.05,
                 xref: 'paper',
                 yref: 'paper',
-                text: '<b>+Y ↑</b>',
+                text: '<b>+Y (90°)</b>',
                 showarrow: false,
                 font: {size: 14, color: '#4ecdc4'}
             },
-            // -X direction (180°, left)
+            // -X axis (180°, left)
             {
                 x: -0.15,
                 y: 0.5,
                 xref: 'paper',
                 yref: 'paper',
-                text: '<b>← -X</b>',
+                text: '<b>-X (180°)</b>',
                 showarrow: false,
                 font: {size: 14, color: '#ff6b6b'}
             },
-            // -Y direction (270°, bottom)
+            // -Y axis (270°, bottom, backward in LiDAR frame)
             {
                 x: 0.5,
                 y: -0.05,
                 xref: 'paper',
                 yref: 'paper',
-                text: '<b>↓ -Y</b>',
+                text: '<b>-Y (270°)</b>',
                 showarrow: false,
                 font: {size: 14, color: '#4ecdc4'}
             }
@@ -516,8 +676,9 @@ LIDAR_HTML_TEMPLATE = '''<!DOCTYPE html>
                     }
                 },
                 angularaxis: {
+                    // Align polar orientation: +X at 0°, +Y at 90°
                     direction: 'clockwise',
-                    rotation: 90,
+                    rotation: 0,
                     tickmode: 'linear',
                     dtick: 30
                 }
@@ -531,6 +692,127 @@ LIDAR_HTML_TEMPLATE = '''<!DOCTYPE html>
         };
         
         Plotly.newPlot('plot', data, layout, {responsive: true});
+        
+        // Draw 3D coordinate system on canvas
+        function drawCoordinateSystem() {
+            const canvas = document.getElementById('coord-canvas');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width = canvas.offsetWidth * 2; // High DPI
+            const h = canvas.height = canvas.offsetHeight * 2;
+            ctx.scale(2, 2);
+            
+            const centerX = canvas.offsetWidth / 2;
+            const centerY = canvas.offsetHeight / 2;
+            const axisLength = 80;
+            
+            // Clear canvas
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, w, h);
+            
+            // Draw grid
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 0.5;
+            for (let i = -100; i <= 100; i += 20) {
+                ctx.beginPath();
+                ctx.moveTo(0, centerY + i);
+                ctx.lineTo(canvas.offsetWidth, centerY + i);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(centerX + i, 0);
+                ctx.lineTo(centerX + i, canvas.offsetHeight);
+                ctx.stroke();
+            }
+            
+            // 3D projection (isometric-like view)
+            const iso = (x, y, z) => {
+                // Isometric projection: rotate 45° around Z, then 35.264° around X
+                const scale = 0.8;
+                const screenX = centerX + (x - y) * scale;
+                const screenY = centerY - (z * 1.2 + (x + y) * 0.5) * scale;
+                return [screenX, screenY];
+            };
+            
+            // Draw axes with 3D perspective
+            ctx.lineWidth = 3;
+            
+            // X-axis (red) - pointing right
+            ctx.strokeStyle = '#ff6b6b';
+            ctx.beginPath();
+            const [x0, y0] = iso(0, 0, 0);
+            const [x1, y1] = iso(axisLength, 0, 0);
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x1, y1);
+            ctx.stroke();
+            // Arrowhead for X
+            const angleX = Math.atan2(y1 - y0, x1 - x0);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x1 - 10 * Math.cos(angleX - 0.3), y1 - 10 * Math.sin(angleX - 0.3));
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x1 - 10 * Math.cos(angleX + 0.3), y1 - 10 * Math.sin(angleX + 0.3));
+            ctx.stroke();
+            ctx.fillStyle = '#ff6b6b';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText('+X', x1 + 10, y1 + 5);
+            
+            // Y-axis (cyan) - pointing forward (into screen, inverted in final 3D)
+            ctx.strokeStyle = '#4ecdc4';
+            ctx.beginPath();
+            const [y2, y3] = iso(0, axisLength, 0);
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(y2, y3);
+            ctx.stroke();
+            // Arrowhead for Y
+            const angleY = Math.atan2(y3 - y0, y2 - x0);
+            ctx.beginPath();
+            ctx.moveTo(y2, y3);
+            ctx.lineTo(y2 - 10 * Math.cos(angleY - 0.3), y3 - 10 * Math.sin(angleY - 0.3));
+            ctx.moveTo(y2, y3);
+            ctx.lineTo(y2 - 10 * Math.cos(angleY + 0.3), y3 - 10 * Math.sin(angleY + 0.3));
+            ctx.stroke();
+            ctx.fillStyle = '#4ecdc4';
+            ctx.fillText('+Y', y2 - 25, y3 + 5);
+            
+            // Z-axis (light cyan) - pointing up (inverted in final 3D)
+            ctx.strokeStyle = '#95e1d3';
+            ctx.beginPath();
+            const [z4, z5] = iso(0, 0, axisLength);
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(z4, z5);
+            ctx.stroke();
+            // Arrowhead for Z
+            const angleZ = Math.atan2(z5 - y0, z4 - x0);
+            ctx.beginPath();
+            ctx.moveTo(z4, z5);
+            ctx.lineTo(z4 - 10 * Math.cos(angleZ - 0.3), z5 - 10 * Math.sin(angleZ - 0.3));
+            ctx.moveTo(z4, z5);
+            ctx.lineTo(z4 - 10 * Math.cos(angleZ + 0.3), z5 - 10 * Math.sin(angleZ + 0.3));
+            ctx.stroke();
+            ctx.fillStyle = '#95e1d3';
+            ctx.fillText('+Z', z4 - 5, z5 - 10);
+            
+            // Origin marker
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(x0, y0, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillText('O', x0 + 8, y0 - 8);
+            
+            // Draw scanner symbol at origin
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x0, y0, 15, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = '#667eea';
+            ctx.font = '10px Arial';
+            ctx.fillText('Scanner', x0 - 20, y0 + 30);
+        }
+        
+        drawCoordinateSystem();
+        window.addEventListener('resize', drawCoordinateSystem);
         
         // Update max distance from slider
         function updateMaxDistance(value) {
@@ -740,6 +1022,62 @@ class ConfigEditor:
         return copy.deepcopy(self.config)
 
 
+def monitor_scan_process():
+    """Monitor scan subprocess and update status."""
+    global scan_process, scan_status
+    
+    if not scan_process:
+        return
+    
+    try:
+        # Read output line by line
+        for line in scan_process.stdout:
+            line = line.strip()
+            print(f"[SCAN] {line}")  # Log to dashboard console
+            
+            # Parse progress from output
+            if "Camera capture" in line or "Aufnahme" in line:
+                scan_status['progress'] = 'Camera panorama capture...'
+            elif "LiDAR scan" in line or "Scanning" in line:
+                scan_status['progress'] = 'LiDAR 180° scan...'
+            elif "Stitching" in line or "Hugin" in line:
+                scan_status['progress'] = 'Stitching panorama...'
+            elif "Processing 3D" in line or "Point cloud" in line:
+                scan_status['progress'] = '3D point cloud processing...'
+            elif "Saving" in line:
+                scan_status['progress'] = 'Saving results...'
+            elif "points" in line.lower():
+                # Try to extract point count
+                import re
+                match = re.search(r'(\d+)\s*points?', line, re.IGNORECASE)
+                if match:
+                    scan_status['points'] = int(match.group(1))
+        
+        # Wait for process completion
+        return_code = scan_process.wait()
+        
+        if return_code == 0:
+            scan_status['status'] = 'completed'
+            scan_status['progress'] = 'Scan completed successfully'
+            
+            # Find output directory
+            scans_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'scans')
+            if os.path.exists(scans_root):
+                scan_dirs = sorted([d for d in os.listdir(scans_root) 
+                                   if os.path.isdir(os.path.join(scans_root, d))], 
+                                  reverse=True)
+                if scan_dirs:
+                    scan_status['output_dir'] = scan_dirs[0]
+        else:
+            scan_status['status'] = 'failed'
+            scan_status['error'] = f'Process exited with code {return_code}'
+            
+    except Exception as e:
+        scan_status['status'] = 'failed'
+        scan_status['error'] = str(e)
+        print(f"[ERROR] Scan monitoring failed: {e}")
+
+
 def create_app(web_view: WebLidarView, config_editor: ConfigEditor, config_path: str) -> Flask:
     """Create unified Flask application."""
     app = Flask(__name__)
@@ -880,6 +1218,70 @@ def create_app(web_view: WebLidarView, config_editor: ConfigEditor, config_path:
             'uptime': uptime,
             'cpu_temp': cpu_temp,
             'memory': 'N/A'
+        })
+    
+    @app.route('/api/scan/start', methods=['POST'])
+    def start_scan():
+        global scan_process, scan_status
+        
+        if scan_status['status'] == 'running':
+            return jsonify({'success': False, 'error': 'Scan already in progress'}), 409
+        
+        try:
+            # Generate scan ID
+            scan_id = time.strftime('%y%m%d-%H%M')
+            
+            # Reset status
+            scan_status = {
+                'scan_id': scan_id,
+                'status': 'running',
+                'progress': 'Initializing...',
+                'error': None,
+                'points': 0,
+                'output_dir': None
+            }
+            
+            # Get PiLiDAR.py path
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            pilidar_script = os.path.join(script_dir, '..', 'PiLiDAR.py')
+            
+            # Start scan process
+            scan_process = subprocess.Popen(
+                ['python3', pilidar_script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            
+            # Start monitoring thread
+            threading.Thread(target=monitor_scan_process, daemon=True).start()
+            
+            return jsonify({
+                'success': True,
+                'scan_id': scan_id,
+                'message': 'Scan started successfully'
+            })
+            
+        except Exception as e:
+            scan_status['status'] = 'failed'
+            scan_status['error'] = str(e)
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    @app.route('/api/scan/status')
+    def get_scan_status():
+        scan_id = request.args.get('scan_id')
+        
+        if scan_id and scan_id != scan_status.get('scan_id'):
+            return jsonify({'status': 'unknown', 'error': 'Invalid scan ID'}), 404
+        
+        return jsonify({
+            'scan_id': scan_status['scan_id'],
+            'status': scan_status['status'],
+            'progress': scan_status['progress'],
+            'error': scan_status['error'],
+            'points': scan_status['points'],
+            'output_dir': scan_status['output_dir']
         })
     
     @app.route('/api/stop', methods=['POST'])

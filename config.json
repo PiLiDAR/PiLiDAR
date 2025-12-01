@@ -5,7 +5,10 @@
         "NORMAL_RADIUS": 30,
         "SCALE": 0.001,
         "Y_OFFSET": -37.5,
-        "Z_OFFSET": -41.9
+        "Z_OFFSET": -41.9,
+        "INVERT_X": false,
+        "INVERT_Y": false,
+        "INVERT_Z": false
     },
     "ANGULAR_DIGITS": 3,
     "CAM": {
@@ -45,7 +48,7 @@
         "NB_POINTS": 20,
         "RADIUS": 0.5,
         "STATISTICAL_K_NEIGHBORS": 20,
-        "STATISTICAL_OUTLIER_REMOVAL": true,
+        "STATISTICAL_OUTLIER_REMOVAL": false,
         "STATISTICAL_STD_RATIO": 2,
         "VOXEL_SIZE": 0.05
     },
@@ -114,7 +117,7 @@
         "GEAR_RATIO": "1 + 38/14",
         "MICROSTEPS": 16,
         "RELAY_PIN": 24,
-        "SCAN_ANGLE": 180,
+        "SCAN_ANGLE": 90,
         "SCAN_DELAY": 0.08,
         "STEPPER_RES": 200,
         "STEP_ANGLE": null,
@@ -127,7 +130,8 @@
                 13
             ],
             "STEP_PIN": 19
-        }
+        },
+        "IDLE_OFF_DELAY": 10
     },
     "VERTEXCOLOUR": {
         "SCALE": 0.5,

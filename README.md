@@ -31,6 +31,84 @@ klick the images to open the pointclouds in Sketchfab.
 *Interior Scan (Vertex Colors)*
 
 
+## Web Dashboard (v0.9.1-beta)
+
+PiLiDAR includes a comprehensive web-based control center accessible from any device on your network.
+
+### Features
+- **Live LiDAR Visualization**: Real-time polar plots with quality metrics
+- **One-Click Scanning**: Start complete 3D scans with a single button
+- **Configuration Editor**: Modify settings via user-friendly web interface
+- **Scan History**: Browse and download previous scans
+- **System Monitor**: Track CPU temperature, uptime, and storage
+
+### Access Dashboard
+```bash
+# Start dashboard (auto-starts on boot if enabled)
+python3 tools/web_dashboard.py --port 5000
+
+# Access from any device
+http://192.168.0.70:5000
+```
+
+### Start a Full Scan
+1. Navigate to dashboard at `http://<pi-ip>:5000`
+2. Click **"🚀 Start Full Scan"** button
+3. Confirm scan workflow
+4. Monitor real-time progress:
+   - Camera panorama capture (if enabled)
+   - 180° LiDAR scanning
+   - Panorama stitching
+   - 3D point cloud processing
+5. View results automatically (~3-5 minutes total)
+
+### Features Detail
+
+#### Live LiDAR View
+- Interactive polar plots with zoom/pan
+- Distance range slider (1-10m)
+- Real-time quality metrics:
+  - Point density (pts/degree)
+  - Angular coverage (%)
+  - Noise level (mm std dev)
+  - Overall quality score (0-100)
+- 3D coordinate system visualization
+- Auto-updating every 50ms (20 FPS)
+- SSH-compatible (no X11 required)
+
+#### Configuration Editor
+- Web-based JSON editor with validation
+- 60+ parameter tooltips
+- Axis inversion toggles (X/Y/Z)
+- Y/Z offset calibration wizard
+- Reset to defaults button
+- Real-time config save
+
+#### Scan Automation
+- Non-blocking subprocess execution
+- Real-time status updates (every 2 seconds)
+- Progress indicators for each workflow step
+- Automatic motor power management
+- Error recovery with detailed messages
+- Automatic result archival
+
+### API Endpoints
+```bash
+# Start scan programmatically
+curl -X POST http://localhost:5000/api/scan/start
+
+# Check scan status
+curl http://localhost:5000/api/scan/status
+
+# Get system info
+curl http://localhost:5000/api/system
+```
+
+For detailed documentation, see:
+- **Scan Automation**: [`SCAN_AUTOMATION.md`](SCAN_AUTOMATION.md)
+- **Quick Start Guide**: [`QUICKSTART_SCAN.md`](QUICKSTART_SCAN.md)
+
+
 ## Hardware Specs:
 
 - LDRobot LD06, LD19 or STL27L LiDAR

@@ -1,5 +1,7 @@
 from time import sleep
 import os
+import threading
+import time
 
 from lib.lidar_driver import Lidar
 from lib.a4988_driver import A4988
@@ -29,6 +31,60 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 config.init()
 
+# Automatic stepper motor power management
+# Turns relay on before movement and schedules power-off after inactivity.
+AUTO_MOTOR_IDLE_SECONDS = config.get("STEPPER", "IDLE_OFF_DELAY", default=10) or 10
+_motor_idle_timer = None
+_motor_power_lock = threading.Lock()
+
+def _power_on_stepper():
+    if hasattr(config, 'relay_device') and config.relay_device is not None:
+        # Only turn on if currently off
+        try:
+            config.relay_device.on()
+        except Exception:
+            pass
+
+def _power_off_stepper():
+    if hasattr(config, 'relay_device') and config.relay_device is not None:
+        try:
+            config.relay_device.off()
+            print(f"[AutoPower] Stepper relay powered off after {AUTO_MOTOR_IDLE_SECONDS}s idle.")
+        except Exception:
+            pass
+
+def _schedule_power_off():
+    global _motor_idle_timer
+    with _motor_power_lock:
+        if _motor_idle_timer is not None:
+            _motor_idle_timer.cancel()
+        _motor_idle_timer = threading.Timer(AUTO_MOTOR_IDLE_SECONDS, _power_off_stepper)
+        _motor_idle_timer.daemon = True
+        _motor_idle_timer.start()
+
+def _wrap_stepper_methods(stepper_obj):
+    """Monkey-patch movement methods to manage relay power automatically."""
+    if not stepper_obj:
+        return
+    original_move_steps = stepper_obj.move_steps
+    original_move_to_angle = stepper_obj.move_to_angle
+
+    def managed_move_steps(*args, **kwargs):
+        _power_on_stepper()
+        result = original_move_steps(*args, **kwargs)
+        _schedule_power_off()
+        return result
+
+    def managed_move_to_angle(*args, **kwargs):
+        _power_on_stepper()
+        result = original_move_to_angle(*args, **kwargs)
+        _schedule_power_off()
+        return result
+
+    stepper_obj.move_steps = managed_move_steps  # type: ignore
+    stepper_obj.move_to_angle = managed_move_to_angle  # type: ignore
+
+
 enable_cam   = config.get("ENABLE_CAM")
 enable_lidar = config.get("ENABLE_LIDAR")
 enable_IMU   = config.get("ENABLE_IMU")
@@ -54,6 +110,14 @@ stepper = A4988(config.get("STEPPER", "pins", "DIR_PIN"),
                 step_angle=config.get("STEPPER", "STEP_ANGLE"),
                 microsteps=config.get("STEPPER", "MICROSTEPS"),
                 gear_ratio=config.get("STEPPER", "GEAR_RATIO"))
+
+# Enable automatic power management for stepper movements
+_wrap_stepper_methods(stepper)
+# Ensure relay starts off (will turn on at first movement)
+try:
+    _power_off_stepper()
+except Exception:
+    pass
 
 
 # initialize lidar

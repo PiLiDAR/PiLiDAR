@@ -246,12 +246,16 @@ def process_raw(config, save=True):
         array_3D = array_3D[::stride]
         print(f"Downsampled to {array_3D.shape[0]} points with stride {stride}.")
 
-    # Y and Z offset, invert Y and Z axes, and scale on numpy
+    # Y and Z offset, invert Y and Z axes (if configured), and scale on numpy
     # Apply inverted offsets: positive offset shifts in negative direction after inversion
     array_3D[:, 1] -= config.get("3D", "Y_OFFSET")  # Subtract Y_OFFSET
-    array_3D[:, 1] *= -1  # Invert Y axis (mirror Y coordinates)
+    if config.get("3D", "INVERT_Y", default=False):
+        array_3D[:, 1] *= -1  # Invert Y axis (mirror Y coordinates)
     array_3D[:, 2] -= config.get("3D", "Z_OFFSET")  # Subtract Z_OFFSET
-    array_3D[:, 2] *= -1  # Invert Z axis (points above scanner should be positive)
+    if config.get("3D", "INVERT_Z", default=False):
+        array_3D[:, 2] *= -1  # Invert Z axis (points above scanner should be positive)
+    if config.get("3D", "INVERT_X", default=False):
+        array_3D[:, 0] *= -1  # Invert X axis if configured
     scene_scale = config.get("3D", "SCALE")
     if scene_scale != 1:
         array_3D[:, 0:3] *= scene_scale
