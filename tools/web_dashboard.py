@@ -400,37 +400,42 @@ LIDAR_HTML_TEMPLATE = '''<!DOCTYPE html>
 <body>
     <div class="controls">
         <a href="/" style="color: #667eea; text-decoration: none; margin-right: 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">🏠 Dashboard</a>
-        <span class="info">Points: <span id="point-count">0</span></span>
-        <span class="info">Z-Angle: <span id="z-angle">0.0</span>°</span>
-        <span class="info">Buffer: <span id="buffer-size">0</span></span>
-        <span class="info">Quality: <span id="quality-score" style="font-weight: bold;">0</span>/100</span>
+        <span class="info" title="Total number of LiDAR points received since start">Points: <span id="point-count">0</span></span>
+        <span class="info" title="Current vertical angle of the scanner head (stepper motor position)">Z-Angle: <span id="z-angle">0.0</span>°</span>
+        <span class="info" title="Number of points currently displayed in the buffer">Buffer: <span id="buffer-size">0</span></span>
+        <span class="info" title="Overall scan quality score (0-100) based on density, coverage and noise">Quality: <span id="quality-score" style="font-weight: bold;">0</span>/100</span>
+        <span class="info" title="Maximum display distance in meters">Range: <span id="current-range">6.0</span>m</span>
+        <label style="margin-left: 15px; margin-right: 5px;" title="Adjust the maximum distance shown in the plot (1-10 meters)">Max Distance:</label>
+        <input type="range" id="maxDistanceSlider" min="1" max="10" step="0.5" value="6" 
+               style="width: 150px; vertical-align: middle;" 
+               oninput="updateMaxDistance(this.value)">
         <button onclick="clearPlot()">Clear</button>
     </div>
     <div id="quality-panel">
         <h3>Scan Quality Metrics</h3>
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
             <div class="metric">
-                <div class="metric-label">Point Density</div>
+                <div class="metric-label" title="Average number of LiDAR points per degree of angular coverage">Point Density</div>
                 <div class="metric-value"><span id="metric-density">0</span> pts/deg</div>
             </div>
             <div class="metric">
-                <div class="metric-label">Coverage</div>
+                <div class="metric-label" title="Percentage of the 180° scan range that contains valid measurements">Coverage</div>
                 <div class="metric-value"><span id="metric-coverage">0</span>%</div>
             </div>
             <div class="metric">
-                <div class="metric-label">Noise Level</div>
+                <div class="metric-label" title="Standard deviation of distance measurements - lower is better (indicates less noise)">Noise Level</div>
                 <div class="metric-value"><span id="metric-noise">0</span> mm</div>
             </div>
             <div class="metric">
-                <div class="metric-label">Avg Intensity</div>
+                <div class="metric-label" title="Average signal intensity of valid measurements (0-255)">Avg Intensity</div>
                 <div class="metric-value"><span id="metric-intensity">0</span></div>
             </div>
             <div class="metric">
-                <div class="metric-label">Valid Points</div>
+                <div class="metric-label" title="Number of valid points within the max distance range">Valid Points</div>
                 <div class="metric-value"><span id="metric-valid">0</span></div>
             </div>
             <div class="metric">
-                <div class="metric-label">Quality Score</div>
+                <div class="metric-label" title="Overall quality score: 0.4×density + 0.4×coverage + 0.2×noise_inverse">Quality Score</div>
                 <div class="metric-value" id="quality-indicator" style="font-weight: bold; font-size: 18px;"><span id="metric-quality">0</span>/100</div>
             </div>
         </div>
@@ -438,6 +443,51 @@ LIDAR_HTML_TEMPLATE = '''<!DOCTYPE html>
     <div id="plot"></div>
     <script>
         let maxDistance = {{ max_distance }};
+        
+        // Coordinate system annotations (arrows showing X/Y axes)
+        const coordSystemAnnotations = [
+            // X-axis arrow (0° direction, right side)
+            {
+                x: 1.15,
+                y: 0.5,
+                xref: 'paper',
+                yref: 'paper',
+                text: '<b>+X →</b>',
+                showarrow: false,
+                font: {size: 14, color: '#ff6b6b'}
+            },
+            // Y-axis arrow (90° direction, top)
+            {
+                x: 0.5,
+                y: 1.05,
+                xref: 'paper',
+                yref: 'paper',
+                text: '<b>+Y ↑</b>',
+                showarrow: false,
+                font: {size: 14, color: '#4ecdc4'}
+            },
+            // -X direction (180°, left)
+            {
+                x: -0.15,
+                y: 0.5,
+                xref: 'paper',
+                yref: 'paper',
+                text: '<b>← -X</b>',
+                showarrow: false,
+                font: {size: 14, color: '#ff6b6b'}
+            },
+            // -Y direction (270°, bottom)
+            {
+                x: 0.5,
+                y: -0.05,
+                xref: 'paper',
+                yref: 'paper',
+                text: '<b>↓ -Y</b>',
+                showarrow: false,
+                font: {size: 14, color: '#4ecdc4'}
+            }
+        ];
+        
         const data = [{
             type: 'scatterpolar',
             mode: 'markers',
@@ -447,27 +497,49 @@ LIDAR_HTML_TEMPLATE = '''<!DOCTYPE html>
                 color: [],
                 size: 3,
                 colorscale: 'Viridis',
-                showscale: true
+                showscale: true,
+                colorbar: {
+                    title: 'Intensity',
+                    thickness: 15
+                }
             }
         }];
+        
         const layout = {
             polar: {
                 radialaxis: {
                     visible: true,
-                    range: [0, maxDistance * 1000]
+                    range: [0, maxDistance * 1000],
+                    title: {
+                        text: 'Distance (mm)',
+                        font: {size: 12}
+                    }
                 },
                 angularaxis: {
                     direction: 'clockwise',
-                    rotation: 90
+                    rotation: 90,
+                    tickmode: 'linear',
+                    dtick: 30
                 }
             },
             showlegend: false,
-            title: 'Live LiDAR Scan (2D Polar View)',
+            title: `Live LiDAR Scan (2D Polar View) - Max Range: ${maxDistance.toFixed(1)}m`,
             paper_bgcolor: '#1a1a1a',
             plot_bgcolor: '#1a1a1a',
-            font: {color: '#fff'}
+            font: {color: '#fff'},
+            annotations: coordSystemAnnotations
         };
+        
         Plotly.newPlot('plot', data, layout, {responsive: true});
+        
+        // Update max distance from slider
+        function updateMaxDistance(value) {
+            maxDistance = parseFloat(value);
+            document.getElementById('current-range').textContent = maxDistance.toFixed(1);
+            layout.polar.radialaxis.range = [0, maxDistance * 1000];
+            layout.title = `Live LiDAR Scan (2D Polar View) - Max Range: ${maxDistance.toFixed(1)}m`;
+            Plotly.relayout('plot', layout);
+        }
         
         async function updatePlot() {
             try {
@@ -553,6 +625,9 @@ class WebLidarView:
                 self.distances.append(distance_mm)
                 self.intensities.append(intensity if intensity is not None else 128)
                 self.point_count += 1
+                # Recalculate quality metrics periodically (every 50 points)
+                if self.point_count % 50 == 0:
+                    self._calculate_quality_metrics()
     
     def update_z_angle(self, z_angle):
         with self.lock:
@@ -567,27 +642,35 @@ class WebLidarView:
         distances_arr = np.array(list(self.distances))
         intensities_arr = np.array(list(self.intensities))
         
+        # Use max_distance in mm for filtering
         valid_mask = (distances_arr > 0) & (distances_arr < self.max_distance)
         valid_distances = distances_arr[valid_mask]
         valid_intensities = intensities_arr[valid_mask]
+        valid_angles = angles_arr[valid_mask]
         
         self.quality_metrics['valid_points'] = int(np.sum(valid_mask))
         
         if len(valid_distances) == 0:
             return
         
-        angle_range = np.max(angles_arr) - np.min(angles_arr)
+        # Calculate point density (points per degree)
+        angle_range = np.max(valid_angles) - np.min(valid_angles)
         if angle_range > 0:
             self.quality_metrics['point_density'] = float(len(valid_distances) / angle_range)
         
+        # Calculate coverage percentage (how many 1-degree bins have data)
         bins = np.arange(0, 181, 1)
-        hist, _ = np.histogram(angles_arr[valid_mask], bins=bins)
+        hist, _ = np.histogram(valid_angles, bins=bins)
         covered_bins = np.sum(hist > 0)
         self.quality_metrics['coverage_percent'] = float((covered_bins / 180) * 100)
         
+        # Noise level (standard deviation of distances)
         self.quality_metrics['noise_level'] = float(np.std(valid_distances))
+        
+        # Average intensity
         self.quality_metrics['avg_intensity'] = float(np.mean(valid_intensities))
         
+        # Calculate overall quality score (0-100)
         density_score = min(100, (self.quality_metrics['point_density'] / 50) * 100)
         coverage_score = self.quality_metrics['coverage_percent']
         noise_score = max(0, 100 - (self.quality_metrics['noise_level'] / 10))

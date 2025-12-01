@@ -204,6 +204,15 @@ HTML_TEMPLATE = '''
             margin-bottom: 5px;
             color: #8892b0;
             font-weight: 500;
+            cursor: help;
+        }
+        .field-description {
+            font-size: 11px;
+            color: #6b7c93;
+            margin-top: 3px;
+            margin-bottom: 8px;
+            font-style: italic;
+            line-height: 1.4;
         }
         input, select, textarea {
             width: 100%;
@@ -459,6 +468,70 @@ HTML_TEMPLATE = '''
         let config = {};
         let originalConfig = {};
         let currentWizardStep = 1;
+        
+        // Field descriptions for tooltips
+        const fieldDescriptions = {
+            // General
+            'ENABLE_LIDAR': 'Enable LiDAR sensor data acquisition during scan',
+            'ENABLE_CAM': 'Enable camera for panorama image capture',
+            'ENABLE_IMU': 'Enable IMU sensor for orientation data (experimental)',
+            'ENABLE_PANO': 'Enable automatic panorama stitching with Hugin',
+            'ENABLE_3D': 'Enable 3D point cloud generation from LiDAR data',
+            'ENABLE_VERTEXCOLOUR': 'Map panorama RGB colors to 3D point cloud',
+            'ENABLE_FILTERING': 'Apply statistical outlier removal to point cloud',
+            
+            // LiDAR
+            'LIDAR.DEVICE': 'Serial port for STL27L LiDAR sensor (usually /dev/ttyUSB0)',
+            'LIDAR.LIDAR_OFFSET_ANGLE': 'Angular offset calibration for LiDAR mounting position (degrees)',
+            'LIDAR.TARGET_RES': 'Target angular resolution - lower values = more detail (degrees per step)',
+            'LIDAR.TARGET_SPEED': 'LiDAR motor rotation speed (Hz)',
+            
+            // Stepper Motor
+            'STEPPER.SCAN_ANGLE': 'Total vertical scan angle range (degrees, max 180°)',
+            'STEPPER.GEAR_RATIO': 'Mechanical gear ratio between motor and scanner head',
+            'STEPPER.MICROSTEPS': 'Microstepping mode: 1=full, 2=half, 4=quarter, 8=eighth, 16=sixteenth step',
+            'STEPPER.STEP_DELAY': 'Delay between motor steps in seconds - lower = faster but may skip steps',
+            'STEPPER.SCAN_DELAY': 'Stabilization delay after motor movement (seconds)',
+            
+            // Camera
+            'CAM.preview_dims': 'Preview image dimensions [width, height] for focusing',
+            'CAM.dims': 'Full resolution capture dimensions [width, height]',
+            'CAM.sharpness': 'Image sharpness adjustment (0.0-1.0)',
+            'CAM.saturation': 'Color saturation adjustment (0.0-2.0)',
+            'CAM.AEB': 'Auto Exposure Bracketing: capture multiple exposures for HDR',
+            'CAM.AEB_STOPS': 'Exposure stops for AEB: [EV-, EV0, EV+] (e.g., [-1, 0, 1])',
+            
+            // Panorama
+            'PANO.IMGCOUNT': 'Number of images to capture around 360° (must match Hugin template)',
+            'PANO.PANO_WIDTH': 'Output panorama width in pixels',
+            
+            // 3D Processing
+            '3D.Y_OFFSET': 'Sensor Y-axis offset from rotation center (mm, negative = backward)',
+            '3D.Z_OFFSET': 'Sensor Z-axis offset from rotation center (mm, negative = below)',
+            '3D.NORMAL_RADIUS': 'Radius for normal vector estimation in point cloud (mm)',
+            '3D.SCALE': 'Coordinate scaling factor (1.0 = millimeters)',
+            '3D.EXT': 'Output file format: ply, xyz, or pcd',
+            '3D.ASCII': 'Save as ASCII text format (true) or binary (false)',
+            
+            // Filtering
+            'FILTERING.FILTER_ON_PI': 'Apply outlier filtering on Raspberry Pi (vs post-processing)',
+            'FILTERING.VOXEL_SIZE': 'Voxel grid downsampling resolution (mm, 0=disabled)',
+            'FILTERING.NB_POINTS': 'Minimum neighbors for statistical outlier removal (typical: 20)',
+            'FILTERING.RADIUS': 'Search radius for neighbor detection (mm)',
+            
+            // GPIO
+            'PORT': 'LiDAR serial port device path',
+            'BAUDRATE': 'Serial communication baud rate (must match LiDAR: 230400)',
+            'DIR': 'GPIO pin for stepper motor direction control',
+            'STEP': 'GPIO pin for stepper motor step signal',
+            'MS': 'GPIO pins for microstepping mode selection [MS1, MS2, MS3]',
+            'RELAY': 'GPIO pin for relay control (motor power management)',
+            
+            // Statistical Outlier Removal (new P0 features)
+            'STATISTICAL_OUTLIER_REMOVAL': 'Enable advanced k-nearest neighbors outlier removal',
+            'STATISTICAL_K_NEIGHBORS': 'Number of nearest neighbors to analyze (default: 20)',
+            'STATISTICAL_STD_RATIO': 'Standard deviation threshold multiplier (default: 2.0)'
+        };
 
         // Load configuration on page load
         window.onload = function() {
@@ -553,9 +626,18 @@ HTML_TEMPLATE = '''
             const label = document.createElement('label');
             label.textContent = name.replace(/_/g, ' ');
             field.appendChild(label);
+            
+            // Add description if available
+            const fieldId = parent ? `${parent}.${name}` : name;
+            const description = fieldDescriptions[fieldId];
+            if (description) {
+                const descDiv = document.createElement('div');
+                descDiv.className = 'field-description';
+                descDiv.textContent = description;
+                field.appendChild(descDiv);
+            }
 
             let input;
-            const fieldId = parent ? `${parent}.${name}` : name;
 
             if (typeof value === 'boolean') {
                 const checkboxLabel = document.createElement('label');
