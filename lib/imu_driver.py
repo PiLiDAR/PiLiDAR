@@ -12,6 +12,8 @@ class MPU6050Wrapper:
         self.freq_divider = int(200 / freq)  # 0x04
 
         self.mpu = MPU6050(self.i2c_bus, self.device_address, self.freq_divider)
+        self.mpu.reset()   # reset device to clear any previous state before DMP init
+        time.sleep(0.1)
         self.mpu.dmp_initialize()
         self.mpu.set_DMP_enabled(True)
         
@@ -49,6 +51,7 @@ class MPU6050Wrapper:
     
     def close(self):
         self.running = False
+        self.thread.join(timeout=1)
 
 
 if __name__ == '__main__':

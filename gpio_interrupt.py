@@ -24,9 +24,8 @@ def start_callback(channel):
         else:
             print("Process has finished, return code:", return_code)
             
-    # Start a new process with the main script with higher priority
-    nice_value = -10
-    call = ["nice", "-n", str(nice_value), "python3", MAIN_SCRIPT] if CONDA_ENV is None else ["nice", "-n", str(nice_value), CONDA_PATH, "run", "-n", CONDA_ENV, "python", MAIN_SCRIPT]
+    # Start a new process with the main script
+    call = ["python3", MAIN_SCRIPT] if CONDA_ENV is None else [CONDA_PATH, "run", "-n", CONDA_ENV, "python", MAIN_SCRIPT]
     process = subprocess.Popen(call)
     print("Started a new process, pid:", process.pid)
 

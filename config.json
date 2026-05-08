@@ -3,10 +3,10 @@
     "ENABLE_CAM": true,
     "ENABLE_IMU": true,
 
-    "ENABLE_PANO": true,
+    "ENABLE_PANO": false,
     "ENABLE_3D": true,
 
-    "ENABLE_VERTEXCOLOUR": true,
+    "ENABLE_VERTEXCOLOUR": false,
     "ENABLE_FILTERING": false,
     
     "SCANS_ROOT": "scans",
@@ -108,10 +108,11 @@
     },
 
     "FILTERING": {
-        "FILTER_ON_PI": false,
+        "FILTER_ON_PI": true,
         "VOXEL_SIZE": 0.05,
         "NB_POINTS": 20,
-        "RADIUS": 0.5
+        "RADIUS": 0.4,
+        "REFERENCE_RADIUS": 0.1
     },
 
     "VERTEXCOLOUR": {
