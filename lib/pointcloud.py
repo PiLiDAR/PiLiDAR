@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import open3d as o3d
 import pye57
@@ -53,12 +54,13 @@ def process_raw(config, save=True):
         return cartesian_list
 
     def postprocess_3D(config, pcd, save=True):
+        t = time.perf_counter()
+
         # move Z offset and scale pointcloud
         pcd = transform(pcd, translate=(0, 0, config.get("3D","Z_OFFSET")))                 # Z offset in mm
         scene_scale = config.get("3D","SCALE")                                              # mm -> 0.001 m
         if scene_scale !=1:
             pcd = transform(pcd, scale=scene_scale)
-
 
         # ANGULAR LOOKUP ("TEXTURING")
         if config.get("ENABLE_VERTEXCOLOUR") and os.path.exists(config.pano_path):
@@ -66,27 +68,32 @@ def process_raw(config, save=True):
                                     cv2.imread(config.pano_path),  # pano
                                     scale=config.get("VERTEXCOLOUR","SCALE"), 
                                     z_rotate=config.get("VERTEXCOLOUR","Z_ROTATE"))
-            
             pcd.colors = o3d.utility.Vector3dVector(np.asarray(colors))
+            print(f"Vertex colour assignment completed. ({time.perf_counter()-t:.1f}s)")
 
         else:  # colorize pointcloud by mapping intensities to colormap
             pcd = colormap_pcd(pcd, gamma=1, cmap="viridis")
+            print(f"Intensity colourmap applied. ({time.perf_counter()-t:.1f}s)")
 
         if save:
-            save_pointcloud_threaded(pcd, config.pcd_path, ply_ascii=config.get("3D","ASCII")) 
-
+            save_pointcloud_threaded(pcd, config.pcd_path, ply_ascii=config.get("3D","ASCII"))
 
         # FILTER OUTLIER POINTS
         if config.get("ENABLE_FILTERING"):
             low_pcd = downsample(pcd, voxel_size=config.get("FILTERING", "VOXEL_SIZE"))
+            print("Downsampling completed.")
 
             nb_points = config.get("FILTERING", "NB_POINTS")
             radius = config.get("FILTERING", "RADIUS")
             filtered_low_pcd = filter_outliers(low_pcd, nb_points=nb_points, radius=radius)
+            print("Outlier removal completed.")
 
+            t_ref = time.perf_counter()
             pcd = filter_by_reference(pcd, filtered_low_pcd, radius=radius)
+            print(f"Filter by reference completed. ({time.perf_counter()-t_ref:.1f}s)")
+
             if save:
-                save_pointcloud_threaded(pcd, config.filtered_pcd_path, ply_ascii=config.get("3D","ASCII"))    
+                save_pointcloud_threaded(pcd, config.filtered_pcd_path, ply_ascii=config.get("3D","ASCII"))
 
         return pcd
 
@@ -99,16 +106,15 @@ def process_raw(config, save=True):
         # IMU data
         if "quaternions" in raw_scan:
             orientation = Orientation(raw_scan["quaternions"], degrees=True)
-            # for i, euler_angles in enumerate(orientation.euler_list):
-            #     print(f"Euler {i}: {euler_angles.x:.3} {euler_angles.y:.3} {euler_angles.z:.3}")
             print(f"\nIMU data loaded: {len(orientation.euler_list)} samples.")
             # TODO: use data to level the pointcloud
 
-        
-        array_3D = merge_2D_points(raw_scan, 
+        t_merge = time.perf_counter()
+        array_3D = merge_2D_points(raw_scan,
                         position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm
                         angle_offset=config.get("LIDAR","LIDAR_OFFSET_ANGLE"),   # small lidar rotation fix
-                        up_vector=(0,0,1)) 
+                        up_vector=(0,0,1))
+        print(f"2D->3D merge completed. ({time.perf_counter()-t_merge:.1f}s)")
 
 
     # else:  # TODO remove -> npy files replaced by single pkl file
@@ -131,9 +137,10 @@ def process_raw(config, save=True):
     #                             up_vector=(0,0,1)) 
 
 
+    t_normals = time.perf_counter()
     normal_radius = config.get("3D","NORMAL_RADIUS")  # radius for normal estimation in mm
     pcd = pcd_from_np(array_3D, estimate_normals=True, max_nn=50, radius=normal_radius)
-    print("\n2D->3D merge completed.")
+    print(f"Normal estimation completed. ({time.perf_counter()-t_normals:.1f}s)")
 
     pcd = postprocess_3D(config, pcd, save=save)
     print("\nprocessing 3D completed.")

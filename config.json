@@ -4,8 +4,7 @@
     "ENABLE_IMU": true,
 
     "ENABLE_PANO": false,
-    "ENABLE_3D": true,
-
+    "ENABLE_3D": false,
     "ENABLE_VERTEXCOLOUR": false,
     "ENABLE_FILTERING": false,
     

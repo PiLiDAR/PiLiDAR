@@ -1,13 +1,13 @@
-numpy
-matplotlib>=3.9.2
+numpy=1.26.4  # open3d 0.18.0 (aarch64) is incompatible with numpy 2.x==1.26.4
+matplotlib>=3.10.9
 plotly>5.24.0
 pyserial>=3.5
-scipy>=1.12.0
+scipy>=1.17.1
 open3d>=0.18.0  # or open3d-cpu
-opencv-python>=4.10  # or opencv-headless-python
-pye57>=0.4.12
-exifread>=3.0.0
-jupyter
+opencv-python>=4.13.0.92  # or opencv-headless-python
+pye57>=0.4.19
+exifread>=3.5.1
+jupyter>=1.1.1
 
 quat>=1.0.0
 mpu6050>=0.0.3

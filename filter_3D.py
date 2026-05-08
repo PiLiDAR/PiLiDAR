@@ -1,4 +1,10 @@
+'''
+USAGE:
+    python filter_3D.py <scan_id>
+'''
+
 import time
+import argparse
 from lib.pointcloud import load_pointcloud, downsample, filter_outliers, filter_by_reference, save_pointcloud_threaded, print_stats
 from lib.visualization import visualize
 from lib.config import Config
@@ -6,10 +12,12 @@ from lib.config import Config
 
 if __name__ == '__main__':
 
-    scan_id = "260506-1956"  # "240824-1230"
+    parser = argparse.ArgumentParser(description="Filter an existing point cloud.")
+    parser.add_argument("scan_id", help="Scan ID to filter (e.g. 260506-1956)")
+    args = parser.parse_args()
 
     config = Config()
-    config.init(scan_id=scan_id)
+    config.init(scan_id=args.scan_id)
     
     # enable visualization
     vis = True if config.platform == 'Windows' else False

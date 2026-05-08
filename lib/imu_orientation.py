@@ -19,7 +19,7 @@ def rad2deg(xyz):
 
 def DMP_get_euler(a_quat):
     psi = np.arctan2(2 * a_quat.x * a_quat.y - 2 * a_quat.w * a_quat.z, 2 * a_quat.w * a_quat.w + 2 * a_quat.x * a_quat.x - 1)
-    theta = -np.arcsin(2 * a_quat.x * a_quat.z + 2 * a_quat.w * a_quat.y)
+    theta = -np.arcsin(np.clip(2 * a_quat.x * a_quat.z + 2 * a_quat.w * a_quat.y, -1.0, 1.0))
     phi = np.arctan2(2 * a_quat.y * a_quat.z - 2 * a_quat.w * a_quat.x, 2 * a_quat.w * a_quat.w + 2 * a_quat.z * a_quat.z - 1)
     return V(psi, theta, phi)
 
