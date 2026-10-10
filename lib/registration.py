@@ -29,9 +29,6 @@ platform = get_platform()
 # Global Registration using RANSAC
 def global_registration(source, target, voxel_size, fast=False, normals_nn=30, fpfh_nn=100, max_iteration=100000, confidence=0.999, edgelength=0.9):
 
-    source_down = estimate_point_normals(source.voxel_down_sample(voxel_size), radius=voxel_size*2, max_nn=normals_nn)
-
-
     def compute_fpfh(pcd_down, voxel_size, fpfh_nn=100):
         radius_feature = voxel_size * 5
         #print(":: Compute FPFH feature with search radius %.3f." % radius_feature)

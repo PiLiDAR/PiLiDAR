@@ -5,29 +5,35 @@ import subprocess
 
 def get_platform():
     platform = sys.platform
-    # print("sys.platform:", platform)
 
     if "win32" in platform:
-        platform = 'Windows'
+        return 'Windows'
     elif 'darwin' in platform:
-        platform = 'Mac'
+        return 'Mac'
+    elif 'linux' in platform:
+        # Check Raspberry Pi hardware/device-tree model
+        try:
+            for dt_path in ('/proc/device-tree/model', '/sys/firmware/devicetree/base/model'):
+                if os.path.exists(dt_path):
+                    with open(dt_path, 'r', errors='ignore') as f:
+                        if 'Raspberry Pi' in f.read():
+                            return 'RaspberryPi'
+            if os.path.exists('/etc/rpi-issue'):
+                return 'RaspberryPi'
+        except Exception:
+            pass
+        return 'Linux'
     else:
-        machine = os.uname().machine
-        # print("os.uname():",  os.uname())
-
-        if 'linux' in platform:
-            if 'aarch64' in machine:
-                platform =  'RaspberryPi'
-            else:
-                platform = 'Linux'
-        elif 'Pico W' in machine:
-            # 'Raspberry Pi Pico W with rp2040'
-            return 'Pico W'
-        elif 'Pico' in machine:
-            return 'Pico'
-        elif 'MIMXRT1011' in machine:
-            # 'Metro MIMXRT1011 with IMXRT1011DAE5A'
-            return 'Metro M7'
+        try:
+            machine = os.uname().machine
+            if 'Pico W' in machine:
+                return 'Pico W'
+            elif 'Pico' in machine:
+                return 'Pico'
+            elif 'MIMXRT1011' in machine:
+                return 'Metro M7'
+        except Exception:
+            pass
     return platform
 
 

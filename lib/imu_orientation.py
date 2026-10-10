@@ -1,7 +1,13 @@
 import open3d as o3d
 import numpy as np
-from quat import XYZVector as V
-from quat import Quaternion as Q
+try:
+    from quat import XYZVector as V
+    from quat import Quaternion as Q
+except ImportError:
+    from collections import namedtuple
+    V = namedtuple('XYZVector', ['x', 'y', 'z'])
+    Q = namedtuple('Quaternion', ['w', 'x', 'y', 'z'])
+
 from scipy.spatial.transform import Rotation as R
 
 

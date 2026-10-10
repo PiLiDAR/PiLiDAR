@@ -11,8 +11,11 @@ import pickle
 
 try:
     from lib.imu_orientation import Orientation
-except:
-    from imu_orientation import Orientation
+except Exception:
+    try:
+        from imu_orientation import Orientation
+    except Exception:
+        Orientation = None
 
 
 def get_scan_dict(z_angles, angular_list=None, cartesian_list=None, scan_id=None, device_id=None, sensor=None, hardware=None, location=None, author=None):
@@ -111,24 +114,26 @@ def process_raw(config, save=True):
                         up_vector=(0,0,1)) 
 
 
-    # else:  # TODO remove -> npy files replaced by single pkl file
-    #     from lib.file_utils import angles_from_filenames
+    elif os.path.exists(config.lidar_dir):
+        from lib.file_utils import angles_from_filenames
 
-    #     print("lidar.pkl file not found!")
-    #     filepaths, z_angles = angles_from_filenames(config.lidar_dir, name="plane", ext="npy")
-    #     print(f"{len(filepaths)} files found (min: {min(z_angles)}, max: {max(z_angles)}).")
+        print(f"Loading raw slices from directory: {config.lidar_dir}")
+        filepaths, z_angles = angles_from_filenames(config.lidar_dir, name="plane", ext="npy")
+        print(f"{len(filepaths)} files found (min: {min(z_angles):.2f}°, max: {max(z_angles):.2f}°).")
 
-    #     print("processing 3D planes...")
-    #     cartesian_list = get_cartesian_list(filepaths)
+        print("processing 3D planes...")
+        cartesian_list = get_cartesian_list(filepaths)
 
-    #     raw_scan = get_scan_dict(z_angles, cartesian_list=cartesian_list)
-    #     if save:
-    #         save_raw_scan(config.raw_path, raw_scan)
+        raw_scan = get_scan_dict(z_angles, cartesian_list=cartesian_list)
+        if save:
+            save_raw_scan(config.raw_path, raw_scan)
 
-    #     array_3D = merge_2D_points(raw_scan, 
-    #                             position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm
-    #                             angle_offset=config.get("LIDAR","LIDAR_OFFSET_ANGLE"),   # small lidar rotation fix
-    #                             up_vector=(0,0,1)) 
+        array_3D = merge_2D_points(raw_scan, 
+                                position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm
+                                angle_offset=config.get("LIDAR","LIDAR_OFFSET_ANGLE"),   # small lidar rotation fix
+                                up_vector=(0,0,1))
+    else:
+        raise FileNotFoundError(f"Neither {config.raw_path} nor {config.lidar_dir} found.") 
 
 
     normal_radius = config.get("3D","NORMAL_RADIUS")  # radius for normal estimation in mm
@@ -256,7 +261,7 @@ def load_pointcloud(filepath, columns="XYZI", csv_delimiter=",", as_tensor=False
             pcd = o3d.io.read_point_cloud(filepath)
 
         if as_array:
-            return np.column_stack(np.asarray(pcd.points), np.asarray(pcd.colors) * 255)
+            return np.column_stack((np.asarray(pcd.points), np.asarray(pcd.colors) * 255))
 
     elif ext == "e57":
         # Create an E57 object with read mode and read data
@@ -269,7 +274,7 @@ def load_pointcloud(filepath, columns="XYZI", csv_delimiter=",", as_tensor=False
         colors = np.column_stack([data["colorRed"],   data["colorGreen"], data["colorBlue"]])
 
         if as_array:
-            return np.column_stack(np.asarray(points), np.asarray(colors))
+            return np.column_stack((np.asarray(points), np.asarray(colors)))
 
         # Normalize the color values to the range [0, 1]
         colors = colors / 255
@@ -375,8 +380,8 @@ def merge_2D_points(raw_scan, z_step=1, ccw=False, position_offset=(0,0,0), angl
     z_angles = raw_scan["z_angles"]
     cartesian_list = raw_scan["cartesian"]
     
-    # init result object with (X,Y,Z, intensity)
-    pointcloud = np.zeros((1, 4))
+    # accumulate 3D slices in a list for fast single concatenation
+    pointcloud_chunks = []
     z_angle = 0
 
     for i, points2d in enumerate(cartesian_list):
@@ -397,8 +402,12 @@ def merge_2D_points(raw_scan, z_step=1, ccw=False, position_offset=(0,0,0), angl
 
         # revolve around the Z-axis (up_vector) by its angle from filename
         points3d = rotate_3D(points3d, -z_angle, translation_vector=position_offset, rotation_axis=np.array(up_vector))
-        # append to 3D scene
-        pointcloud = np.append(pointcloud, points3d, axis=0)
+        pointcloud_chunks.append(points3d)
+    
+    if pointcloud_chunks:
+        pointcloud = np.vstack(pointcloud_chunks)
+    else:
+        pointcloud = np.empty((0, 4))
     
     # Remove rows with NaN values
     pointcloud = remove_NaN(pointcloud)

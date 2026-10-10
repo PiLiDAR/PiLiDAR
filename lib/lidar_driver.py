@@ -171,40 +171,43 @@ class Lidar:
 
                     self.out_i = 0
 
-                self.read()
-                
+                success = self.read()
+                if success:
+                    self.out_i += 1
+                    loop_count += 1
 
             except serial.SerialException:
                 print("SerialException")
                 break
-
-            self.out_i += 1
-            loop_count += 1
 
 
     def read(self):
         # iterate through serial stream until start package is found
         while self.serial_connection.is_open:
             data_byte = self.serial_connection.read()
+            if not data_byte:
+                return False
 
-            if data_byte == self.start_byte:
-                # Check if the next byte is the second byte of the start sequence
+            while data_byte == self.start_byte:
                 next_byte = self.serial_connection.read()
+                if not next_byte:
+                    return False
                 if next_byte == self.dlength_byte:
-                    # If it is, read the entire package
                     self.byte_array = self.serial_connection.read(self.package_len - 2)
                     self.byte_array = self.start_byte + self.dlength_byte + self.byte_array
                     break
-                else:
-                    # If it's not, discard the current byte and continue
-                    continue
+                # if next_byte is itself a start_byte, re-evaluate without discarding
+                data_byte = next_byte
+
+            if self.byte_array:
+                break
 
         # Error handling
         if len(self.byte_array) != self.package_len:
             if self.verbose:
                 print("[WARNING] Incomplete package:", self.byte_array)
             self.byte_array = bytearray()
-            return
+            return False
 
         # Check if the package is valid using check_CRC8
         if not self.check_CRC8(self.byte_array):
@@ -212,7 +215,7 @@ class Lidar:
                 print("[WARNING] Invalid package:", self.byte_array)
             # If the package is not valid, reset byte_array and continue with the next iteration
             self.byte_array = bytearray()
-            return
+            return False
 
         # decoding updates speed, timestamp, angle_package, distance_package, luminance_package
         self.decode(self.byte_array)
@@ -227,6 +230,7 @@ class Lidar:
 
         # reset byte_array
         self.byte_array = bytearray()
+        return True
 
 
     def decode(self, byte_array):  
@@ -253,7 +257,6 @@ class Lidar:
 
     def pwm_from_speed(self, speed):
         m, b = self.pwm_coeffs
-        self.pwm_coeffs
         return (speed - b) / m
 
 

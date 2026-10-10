@@ -235,9 +235,39 @@ Install [RPi Hardware PWM library](https://github.com/Pioreactor/rpi_hardware_pw
 
 
 ### Panorama Stitching
-install Hugin with enblend plugin
+PiLiDAR calls `hugin_executor` from `PATH`, so install the command-line tools
+and Enblend from the OS package manager. The newer Hugin desktop application is
+installed separately from Flathub.
 
-    sudo apt-get install hugin-tools enblend
+    sudo apt-get update
+    sudo apt-get install -y flatpak hugin-tools enblend
+    flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    flatpak install --user flathub net.sourceforge.Hugin
+
+This installs Hugin 2025.0.1 for the current user on supported x86_64 and
+ARM64 systems. The Flathub build is community-provided; the Hugin project links
+to it as a Linux option.
+
+### MeshLab
+On an x86_64 development PC, install MeshLab 2025.07 from Flathub:
+
+    flatpak install --user flathub net.meshlab.MeshLab
+
+Flathub does not currently publish MeshLab for ARM64. On the 64-bit Raspberry
+Pi, install the upstream ARM64 release archive instead:
+
+    MESHLAB_VERSION=2025.07
+    MESHLAB_ARCHIVE="MeshLab${MESHLAB_VERSION}-linux_aarch64.tar.gz"
+    curl -fL "https://github.com/cnr-isti-vclab/meshlab/releases/download/MeshLab-${MESHLAB_VERSION}/${MESHLAB_ARCHIVE}" -o "/tmp/${MESHLAB_ARCHIVE}"
+    echo "963c1f6fc40fd737a80ce690b5f9826b1734a3b91b291779c2ecde202c6ad352  /tmp/${MESHLAB_ARCHIVE}" | sha256sum -c -
+    mkdir -p "$HOME/.local/opt/meshlab-${MESHLAB_VERSION}"
+    tar -xzf "/tmp/${MESHLAB_ARCHIVE}" -C "$HOME/.local/opt/meshlab-${MESHLAB_VERSION}"
+    mkdir -p "$HOME/.local/bin"
+    ln -s "$HOME/.local/opt/meshlab-${MESHLAB_VERSION}/usr/bin/meshlab" "$HOME/.local/bin/meshlab-${MESHLAB_VERSION}"
+
+Launch it with `~/.local/bin/meshlab-2025.07`. This leaves any OS-packaged
+MeshLab untouched. The archive SHA-256 is published with the [MeshLab 2025.07
+release](https://github.com/cnr-isti-vclab/meshlab/releases/tag/MeshLab-2025.07).
 
 
 

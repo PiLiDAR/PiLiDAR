@@ -12,6 +12,9 @@ import datetime
 from typing import Optional
 # import subprocess
 
+import ast
+import operator
+
 try:
     from lib.file_utils import make_dir
     from lib.platform_utils import get_platform, allow_serial
@@ -19,11 +22,29 @@ except:
     from file_utils import make_dir
     from platform_utils import get_platform, allow_serial
 
+_SAFE_OPERATORS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.USub: operator.neg,
+    ast.UAdd: operator.pos,
+}
 
-platform = get_platform()
-if platform == 'RaspberryPi':
-    # os.environ['LG_WD'] = '/tmp'  # set LGPIO tmp directory
-    import RPi.GPIO as GPIO  # type: ignore
+def safe_eval_math(expr: str):
+    """Safely evaluate simple arithmetic expressions like '1 + 38/14' without eval()."""
+    node = ast.parse(str(expr).strip(), mode='eval').body
+
+    def _eval(n):
+        if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)):
+            return n.value
+        elif isinstance(n, ast.BinOp) and type(n.op) in _SAFE_OPERATORS:
+            return _SAFE_OPERATORS[type(n.op)](_eval(n.left), _eval(n.right))
+        elif isinstance(n, ast.UnaryOp) and type(n.op) in _SAFE_OPERATORS:
+            return _SAFE_OPERATORS[type(n.op)](_eval(n.operand))
+        raise ValueError(f"Unsupported expression element in: {expr}")
+
+    return _eval(node)
 
 
 class Config:
@@ -174,15 +195,19 @@ class Config:
 
 
     def evaluate_formula(self, formula: str):
-        return eval(formula)
+        return safe_eval_math(formula)
 
     def gpio_setup(self, debug=False):
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(debug)
-        
-        # power relay
-        relay_pin = self.get("STEPPER", "RELAY_PIN")
-        GPIO.setup(relay_pin, GPIO.OUT)
+        try:
+            import RPi.GPIO as GPIO  # type: ignore
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setwarnings(debug)
+            
+            # power relay
+            relay_pin = self.get("STEPPER", "RELAY_PIN")
+            GPIO.setup(relay_pin, GPIO.OUT)
+        except (ImportError, RuntimeError) as e:
+            print(f"[WARNING] GPIO setup skipped: {e}")
 
 
 def format_value(value, digits):

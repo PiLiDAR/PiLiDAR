@@ -19,6 +19,7 @@ class MPU6050Wrapper:
         self.FIFO_buffer = [0]*64
 
         self.quat = None  # current Quaternion object
+        self._lock = threading.Lock()
         
         self.running = True
         self.thread = threading.Thread(target=self._read_mpu6050)
@@ -34,21 +35,32 @@ class MPU6050Wrapper:
 
                     # Check if any value is NaN
                     if not any(math.isnan(value) for value in [quat.w, quat.x, quat.y, quat.z]):
-                        self.quat = quat
+                        with self._lock:
+                            self.quat = quat
                         time.sleep(0.02)
                     else:
                         time.sleep(0.01)
+                else:
+                    time.sleep(0.005)
             except OSError as e:
                 time.sleep(0.01)
     
     def get_euler_angles(self):
-        return self.mpu.DMP_get_euler_roll_pitch_yaw(self.quat)
+        with self._lock:
+            if self.quat is None:
+                return None
+            return self.mpu.DMP_get_euler_roll_pitch_yaw(self.quat)
     
     def get_quat_values(self):
-        return np.array([self.quat.w, self.quat.x, self.quat.y, self.quat.z])
+        with self._lock:
+            if self.quat is None:
+                return None
+            return np.array([self.quat.w, self.quat.x, self.quat.y, self.quat.z])
     
     def close(self):
         self.running = False
+        if self.thread.is_alive() and threading.current_thread() != self.thread:
+            self.thread.join(timeout=0.5)
 
 
 if __name__ == '__main__':

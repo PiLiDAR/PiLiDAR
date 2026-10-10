@@ -14,3 +14,7 @@ mpu6050>=0.0.3
 
 rpi-lgpio>=0.6
 #rpi-hardware-pwm>=0.2.2
+# Non-Python dependencies (install separately; see README setup guide):
+# Debian/Ubuntu CLI stitching: flatpak, hugin-tools, enblend.
+# Hugin GUI: 2025.0.1 via Flathub (x86_64 and aarch64).
+# MeshLab: 2025.07 via Flathub (x86_64) or upstream ARM64 archive on the Pi.
