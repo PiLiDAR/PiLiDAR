@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-10-11
+
+### Added
+- **Native Picamera2 camera backend (`lib/picam2_utils.py`):** Replaces the `rpicam-still` subprocess hack with a single persistent Picamera2 session. Calibration now lets the 3A pipeline settle over a few frames, reads the converged `ExposureTime` / `AnalogueGain` / `DigitalGain` / `ColourGains` from `capture_metadata()`, then locks 3A (`AeEnable=False`, `AwbEnable=False`) and drives the sensor manually — no more per-frame process spawn or EXIF round-trips.
+  - **HDR bracket preserved:** keeps the shutter-for-dark / gain-for-bright strategy (negative EV steps lengthen exposure, positive EV steps raise gain) to avoid motion blur on bright frames. Total gain is split into analogue (capped at `MAX_ANALOGUE_GAIN = 16`) and digital components; `DigitalGain` stays at 1 below the cap.
+  - **Unit handling:** Picamera2 reports exposure in nanoseconds and gain as linear multipliers; the module converts to the project's seconds / total-gain convention at the boundary.
+  - **Drop-in interface:** exposes `estimate_camera_parameters()` and `take_HDR_photo()` matching `lib/rpicam_utils.py`, plus a `Camera` context manager for keeping one session across all angles.
+- **Backend auto-selection (`PiLiDAR.py`):** imports Picamera2 when available and falls back to the `rpicam-still` path otherwise (e.g. on a desktop without the camera stack). The chosen backend is logged during calibration.
+
 ## [2.1.1] - 2026-10-11
 
 ### Fixed

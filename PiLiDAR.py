@@ -6,7 +6,16 @@ from lib.a4988_driver import A4988
 from lib.imu_driver import MPU6050Wrapper
 from lib.config import Config, format_value
 from lib.pointcloud import process_raw, save_raw_scan, get_scan_dict
-from lib.rpicam_utils import take_HDR_photo, estimate_camera_parameters  #, take_photo
+# Camera backend: prefer native Picamera2 (persistent session, proper 3A
+# settle -> read -> lock); fall back to the rpicam-still subprocess path when
+# picamera2 isn't available (e.g. on a desktop without the camera stack).
+try:
+    import picamera2  # noqa: F401
+    from lib.picam2_utils import take_HDR_photo, estimate_camera_parameters
+    CAMERA_BACKEND = "picamera2"
+except ImportError:
+    from lib.rpicam_utils import take_HDR_photo, estimate_camera_parameters
+    CAMERA_BACKEND = "rpicam-still"
 from lib.pano_utils import hugin_stitch, hugin_refine
 
 
@@ -73,8 +82,8 @@ if enable_lidar:
 try:
     # 360° SHOOTING PHOTOS
     if enable_cam:
-        # CALIBRATE CAMERA: extract exposure time and gain from exif data, iterate through Red/Blue Gains for custom AWB
-        print("Calibrating Camera...")
+        # CALIBRATE CAMERA: converge 3A and lock exposure/gain/AWB
+        print(f"Calibrating Camera (backend: {CAMERA_BACKEND})...")
         current_exposure_time, current_gain, current_awbgains = estimate_camera_parameters(config)
         # print("[RESULT] AE:", current_exposure_time, "| Gain:", current_gain, "| AWB R:", round(current_awbgains[0],3), "B:", round(current_awbgains[1],3))
 
