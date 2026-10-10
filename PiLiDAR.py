@@ -7,7 +7,7 @@ from lib.imu_driver import MPU6050Wrapper
 from lib.config import Config, format_value
 from lib.pointcloud import process_raw, save_raw_scan, get_scan_dict
 from lib.rpicam_utils import take_HDR_photo, estimate_camera_parameters  #, take_photo
-from lib.pano_utils import hugin_stitch
+from lib.pano_utils import hugin_stitch, hugin_refine
 
 
 print('''
@@ -148,8 +148,14 @@ finally:
 
 # STITCHING PROCESS
 if enable_cam:
-    print("\nStitching Pano...")
-    project_path = hugin_stitch(config)
+    # REFINE runs feature matching + optimization (slower, better alignment);
+    # otherwise fall back to the fast template-only stitch.
+    if config.get("PANO", "REFINE"):
+        print("\nStitching Pano (refine: feature matching + optimization)...")
+        project_path = hugin_refine(config)
+    else:
+        print("\nStitching Pano (template only)...")
+        project_path = hugin_stitch(config)
 
 
 # 3D PROCESSING

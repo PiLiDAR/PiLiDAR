@@ -88,9 +88,13 @@ The test suite passes in CI on desktop machines without physical hardware or Ras
   - Migrate from deprecated `RPi.GPIO` to modern `gpiozero` / `lgpio` (compatible with Pi 4, Pi 5, and kernel 6.x+).
   - Investigate hardware timer / PWM stepping to eliminate userspace `time.sleep` jitter during sweeps.
   - Evaluate endstop or home-position switch support to prevent cumulative stepper angle drift.
-- **Camera Subsystem Modernization**
+- **Camera Subsystem Modernization (3A + HDR)**
   - Migrate from repeated `rpicam-still` subprocess invocations to native `Picamera2` Python bindings.
-  - Maintain persistent sensor state to eliminate repeated initialization delays between exposure brackets.
+  - Maintain a persistent sensor session so AE/AWB state is not re-discovered per frame (each `rpicam-still` call currently re-initializes the CSI-2/ISP pipeline, ~1.5–3 s/frame).
+  - **Replace the iterative AWB loop** (`estimate_camera_parameters()` in `lib/rpicam_utils.py`): today it shoots up to 10 preview frames and scales `awbgains *= (R, B)` until mean R/B match within 1% — a 2-channel correction (green pinned to 1) that is scene-dependent. With Picamera2, let 3A settle over a few frames, then read `ExposureTime` / `AnalogueGain` / `ColourGains` directly from `capture_metadata()` and lock them (`AeEnable=False`, `AwbEnable=False`) for the whole 360° run — no EXIF parsing, no iteration.
+  - **Preserve the shutter-for-dark / gain-for-bright HDR bracket** (`take_HDR_photo()`): negative EV via shutter, positive EV via analogue gain (avoids motion blur on the bright end). Keep `DigitalGain` at 1 and cap `AnalogueGain` at the sensor ceiling.
+  - **Watch the units:** Picamera2 `ExposureTime` is in **ns**; `rpicam-still --shutter` was in **µs**.
+  - Drop the `exifread` dependency once the migration lands.
 - **Pre-Flight Hardware Diagnostics**
   - Implement an automated diagnostic routine (`pilidar doctor`) checking UART communication, I2C IMU connectivity, camera availability, and storage space before beginning a scan.
 
@@ -121,6 +125,14 @@ A full 180° sweep with the STL27L captures continuously at 921,600 baud with 0 
 - **LiDAR-to-Camera 6-DOF Extrinsics Calibration**
   - Formalize rigid-body transform matrix ($X, Y, Z, \text{roll}, \text{pitch}, \text{yaw}$) between LiDAR optical center, stepper rotation axis, and camera sensor center.
   - Build a semi-automated calibration utility using a known physical fixture (e.g. corner target or planar board).
+- **Panorama Geometry Refinement (Hugin feature matching + optimization)**
+  - **Done (v2.1.0):** `hugin_refine()` in `lib/pano_utils.py` now runs `cpfind`/`cpclean`/`linefind`/`pto_var`/`autooptimiser` before blending, refining per-mount extrinsics (yaw/pitch/roll) and shared lens distortion from control points instead of trusting the fixed template. It is Flatpak-aware (`_run_hugin()`) and is the default path via `PANO.REFINE`. Validated on scan `240827-1322`: seam ghosting (e.g. the gray pillows) is eliminated versus the template-only original.
+  - **Corrected `pto_var`:** translations are locked (no `TrX/TrY/TrZ` — a rotational pano must not translate, or you get parallax), image 0 is fully anchored (`!r0,!p0,!y0`), and distortion (`Ra..Re,a..e`) is optimized on all images so they converge consistently.
+  - **Remaining work:**
+    - **Fix the template image-ordering bug:** `take_HDR_photo()` emits each angle's bracket in capture order `[−4,−2,0,+2,+4]`, but the `.pto` templates list `[0,+2,−2,+4,−4]`. Because the templates hold stale Windows paths, `pto_template` matches *positionally*, so the EV-0 anchor/distortion priors land on the wrong (−4 EV) frame. Either sort `imglist` to match the template order or generate the project programmatically.
+    - **Make lens distortion a shared/linked parameter** across all images of the same lens (templates currently bake it into image 0 only, leaving images 1–3 un-corrected).
+    - **Persist the optimized per-lens distortion + per-mount extrinsics** into the scan `metadata.json` sidecar so future scans seed from a measured prior instead of a hand-authored template.
+    - **Optional two-stage pipeline:** pre-fuse each angle's bracket with `enfuse` into one base image and run the geometry solve on the 4 base images (one per 90°) — simpler ordering and cleaner control points for high-contrast/texture-poor scenes.
 - **Camera Intrinsic & Panorama Exposure Normalization**
   - Document and automate lens distortion calibration (fisheye / equirectangular projection parameters).
   - Standardize auto-exposure and white balance normalization routines to eliminate seam artifacts in 360° panoramas.

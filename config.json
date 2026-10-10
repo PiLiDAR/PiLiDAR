@@ -95,7 +95,8 @@
         "IMGCOUNT": 4,
         "PANO_WIDTH": 3600,
         "TEMPLATE_DIR": "hugin",
-        "OUTPUT_NAME": "_blended_fused.jpg"
+        "OUTPUT_NAME": "_blended_fused.jpg",
+        "REFINE": true
     },
 
     "3D": {

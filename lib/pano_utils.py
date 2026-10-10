@@ -6,20 +6,57 @@ Hugin CLI parameters from StereoPi.sh :
     pto_template --output=./tmp/project.pto --template=template.pto ./tmp/project.pto
     hugin_executor --stitching --prefix=$RESULT_NAME ./tmp/project.pto
 
-additional parameters:
+additional parameters (used by hugin_refine):
     pto_lensstack -o project1.pto --new-lens i1 project.pto
     cpfind -o project.pto --multirow project.pto
     cpclean -o project.pto project.pto
     linefind -o project.pto project.pto
-    pto_var -o project.pto --opt TrX,TrY,TrZ,r,Eev,Ra,Rb,Rc,Rd,Re,!TrX0,!TrY0,!TrZ0,!r0,!Eev0,!Ra1,!Rb1,!Rc1,!Rd1,!Re1 project.pto
+    # refine rotations + shared distortion; lock translations (rotational pano);
+    # anchor image 0 fully. No TrX/TrY/TrZ -> no parallax.
+    pto_var -o project.pto --opt r,p,y,Ra,Rb,Rc,Rd,Re,a,b,c,d,e,!r0,!p0,!y0 project.pto
     autooptimiser -n -o project.pto project.pto
     pano_modify  --projection=1 --fov=AUTO --center --canvas=AUTO --crop=AUTO -o project.pto project.pto
+
+Hugin tools are invoked via _run_hugin(), which prefers a system-wide install
+on PATH and falls back to the Flatpak build (net.sourceforge.Hugin).
 """
 
 import math
+import shutil
 import numpy as np
 import subprocess
 import os
+
+
+# Hugin tools may be installed system-wide (hugin-tools) or via Flatpak.
+# Detect once and build the correct command prefix for each tool.
+_HUGIN_FLATPAK_APP = "net.sourceforge.Hugin"
+
+
+def _hugin_prefix(tool):
+    """Return the command prefix to invoke a Hugin CLI tool.
+
+    Prefers a system-wide install on PATH; falls back to the Flatpak build
+    (``flatpak run --user --command=<tool> net.sourceforge.Hugin``).
+    """
+    if shutil.which(tool):
+        return [tool]
+    if shutil.which("flatpak"):
+        return ["flatpak", "run", "--user", f"--command={tool}", _HUGIN_FLATPAK_APP]
+    raise RuntimeError(
+        f"Hugin tool '{tool}' not found on PATH and no Flatpak install detected. "
+        "Install hugin-tools or the net.sourceforge.Hugin Flatpak."
+    )
+
+
+def _run_hugin(tool, *args, check=True):
+    """Run a Hugin CLI tool with the detected prefix and return the CompletedProcess."""
+    cmd = _hugin_prefix(tool) + list(args)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if check and result.returncode != 0:
+        tail = (result.stderr.strip().splitlines() or [""])[-5:]
+        raise RuntimeError(f"{tool} failed (rc={result.returncode}):\n" + "\n".join(tail))
+    return result
 
 
 def hugin_modify(pto_path, new_project_path, width=6800):
@@ -52,17 +89,17 @@ def hugin_stitch(config, nice=19):
     output_path  = os.path.join(config.scan_dir, f'{config.scan_id}.jpg')
 
     # create Hugin project
-    subprocess.run(['pto_gen', '--projection=2', '--fov=360', '-o', pto_path, *config.imglist])  # *list -> unpack
-    
+    _run_hugin('pto_gen', '--projection=2', '--fov=360', '-o', pto_path, *config.imglist)  # *list -> unpack
+
     # apply template
-    subprocess.run(['pto_template', f'--output={pto_path}', f'--template={config.template_path}', pto_path])
+    _run_hugin('pto_template', f'--output={pto_path}', f'--template={config.template_path}', pto_path)
 
     # modify resolution of the temporary project file
     hugin_modify(pto_path, pto_path, width=config.get("PANO", "PANO_WIDTH"))
 
     # start stitching as non-blocking thread with low priority
     if config.get("ENABLE_PANO"):
-        cmd_string = ['nice', '-n', str(nice), 'hugin_executor', '--stitching', f'--prefix={output_path}', pto_path]
+        cmd_string = ['nice', '-n', str(nice), *_hugin_prefix('hugin_executor'), '--stitching', f'--prefix={output_path}', pto_path]
         process = subprocess.Popen(cmd_string)
 
         # Wait for the process to finish
@@ -75,35 +112,66 @@ def hugin_stitch(config, nice=19):
     return output_path
 
 
-def hugin_refine(config, nice=19):
+def _count_control_points(pto_path):
+    """Count control-point lines (``c ...``) in a Hugin project file."""
+    count = 0
+    with open(pto_path, 'r') as f:
+        for line in f:
+            if line.startswith("c "):
+                count += 1
+    return count
+
+
+def hugin_refine(config, nice=19, min_control_points=5):
+    """Stitch with feature matching + constrained optimization.
+
+    Pipeline: pto_gen -> pto_template -> cpfind -> cpclean -> linefind
+              -> pto_var -> autooptimiser -> hugin_executor.
+
+    The template provides coarse priors (yaw/pitch/roll + lens distortion);
+    control points then let Hugin refine the per-mount extrinsics and shared
+    distortion. If too few control points are found (e.g. a textureless scene),
+    optimization is skipped and the template priors are used as-is.
+    """
     pto_path = config.pto_path
-    output_path =  os.path.join(config.scan_dir, f'{config.scan_id}.jpg')
+    output_path = os.path.join(config.scan_dir, f'{config.scan_id}.jpg')
 
     # Create Hugin project
-    subprocess.run(['pto_gen', '--projection=2', '--fov=360', '-o', pto_path, *config.imglist], check=True)
+    _run_hugin('pto_gen', '--projection=2', '--fov=360', '-o', pto_path, *config.imglist)
 
-    # Apply template
-    subprocess.run(['pto_template', f'--output={pto_path}', f'--template={config.template_path}', pto_path], check=True)
+    # Apply template (coarse priors)
+    _run_hugin('pto_template', f'--output={pto_path}', f'--template={config.template_path}', pto_path)
 
-    # Add control points
-    subprocess.run(['cpfind', '-o', pto_path, '--multirow', pto_path], check=True)
+    # Add + clean control points
+    _run_hugin('cpfind', '-o', pto_path, '--multirow', pto_path)
+    _run_hugin('cpclean', '-o', pto_path, pto_path)
 
-    # Clean control points
-    subprocess.run(['cpclean', '-o', pto_path, pto_path], check=True)
+    n_cp = _count_control_points(pto_path)
+    print(f"[hugin_refine] {n_cp} control points after cpclean")
 
-    # Find line features
-    subprocess.run(['linefind', '-o', pto_path, pto_path], check=True)
+    if n_cp >= min_control_points:
+        # Find line features (verticals) to help constrain roll
+        _run_hugin('linefind', '-o', pto_path, pto_path)
 
-    # Optimize the project
-    subprocess.run(['pto_var', '-o', pto_path, '--opt', 'TrX,TrY,TrZ,r,Eev,Ra,Rb,Rc,Rd,Re,!TrX0,!TrY0,!TrZ0,!r0,!Eev0,!Ra1,!Rb1,!Rc1,!Rd1,!Re1', pto_path], check=True)
-    subprocess.run(['autooptimiser', '-n', '-o', pto_path, pto_path], check=True)
+        # Constrained optimization: refine rotations + shared lens distortion.
+        # - No TrX/TrY/TrZ: a 360° pano rotates about a common optical center,
+        #   so translations stay locked (avoids parallax).
+        # - Image 0 fully anchored (!r0,!p0,!y0) as the coordinate reference.
+        # - Distortion (Ra..Re,a..e) optimized on all images so they converge
+        #   consistently instead of one frame carrying it alone.
+        _run_hugin('pto_var', '-o', pto_path, '--opt',
+                   'r,p,y,Ra,Rb,Rc,Rd,Re,a,b,c,d,e,!r0,!p0,!y0', pto_path)
+        _run_hugin('autooptimiser', '-n', '-o', pto_path, pto_path)
+    else:
+        print(f"[hugin_refine] WARNING: only {n_cp} control points "
+              f"(< {min_control_points}); skipping optimization, using template priors.")
 
     # Modify resolution of the temporary project file
     hugin_modify(pto_path, pto_path, width=config.get("PANO", "PANO_WIDTH"))
 
     # Start stitching as non-blocking thread with low priority
     if config.get("ENABLE_PANO"):
-        cmd_string = ['nice', '-n', str(nice), 'hugin_executor', '--stitching', f'--prefix={output_path}', pto_path]
+        cmd_string = ['nice', '-n', str(nice), *_hugin_prefix('hugin_executor'), '--stitching', f'--prefix={output_path}', pto_path]
         process = subprocess.Popen(cmd_string)
 
         # Wait for the process to finish

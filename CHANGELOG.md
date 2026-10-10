@@ -3,6 +3,23 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-10-11
+
+### Added
+- **Hugin Refine Pipeline (`lib/pano_utils.py`):** Added a feature-matching + constrained-optimization stitching path (`hugin_refine()`) that runs `cpfind`/`cpclean`/`linefind`/`pto_var`/`autooptimiser` before blending, correcting per-mount extrinsics (yaw/pitch/roll) and shared lens distortion instead of trusting the fixed template. Validated on scan `240827-1322`: seam ghosting (e.g. the gray pillows) is eliminated versus the template-only original.
+  - **Corrected `pto_var`:** locks translations (no `TrX/TrY/TrZ`, avoiding parallax in a rotational pano), fully anchors image 0 (`!r0,!p0,!y0`), and optimizes distortion on all images so they converge consistently.
+  - **Control-point fallback:** if `cpclean` yields fewer than `min_control_points` (default 5), optimization is skipped and the template priors are used as-is (textureless scenes).
+- **Flatpak-aware Hugin runner (`lib/pano_utils.py`):** `_run_hugin()` / `_hugin_prefix()` resolve each Hugin CLI tool from PATH first, then fall back to the Flatpak build (`net.sourceforge.Hugin`). Both `hugin_stitch()` and `hugin_refine()` now use it.
+- **Experiment Harness (`experiments/refine_experiment.py`):** Standalone script to run the refine pipeline on an existing scan and compare against the original output.
+
+### Changed
+- **Refine by default (`PiLiDAR.py`, `config.json`):** The stitching step now calls `hugin_refine()` when `PANO.REFINE` is `true` (default), falling back to the fast template-only `hugin_stitch()` when `false`.
+- **Experiment Relocation:** Moved ad-hoc experiment scripts into a dedicated `experiments/` directory.
+- **Roadmap Consolidation (`ROADMAP.md`):** Folded the camera 3A/HDR and Hugin template analysis into the Phase 1 (Camera Subsystem Modernization) and Phase 2 (Panorama Geometry Refinement) sections, including the concrete Picamera2 migration notes and the remaining template-ordering / shared-distortion work.
+
+### Removed
+- **`MOST-OBVIOUS-ISSUES.md`:** Content consolidated into `ROADMAP.md`; file removed.
+
 ## [2.0.0] - 2026-10-10
 
 ### Added
