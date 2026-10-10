@@ -3,6 +3,11 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-10-11
+
+### Fixed
+- **Template image-ordering bug (`lib/pano_utils.py`):** `take_HDR_photo()` emits each angle's bracket in capture order `[−4,−2,0,+2,+4]`, but the Hugin templates list images in `[0,+2,−2,+4,−4]` (EV-0 first). Because the templates carry stale Windows paths, `pto_template` matches images *positionally*, so the EV-0 anchor and shared-distortion priors were landing on the wrong (−4 EV) frame. Added `_template_ev_order()` (parses the per-angle EV sequence from a template) and `_reorder_imglist()` (re-sorts each angle group to match it), and wired both into `hugin_stitch()` and `hugin_refine()` before `pto_gen`. Verified on scan `240827-1322`: the first angle group now maps `[0,+2,−2,+4,−4]` as the template expects.
+
 ## [2.1.0] - 2026-10-11
 
 ### Added

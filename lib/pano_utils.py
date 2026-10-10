@@ -22,6 +22,7 @@ on PATH and falls back to the Flatpak build (net.sourceforge.Hugin).
 """
 
 import math
+import re
 import shutil
 import numpy as np
 import subprocess
@@ -59,6 +60,64 @@ def _run_hugin(tool, *args, check=True):
     return result
 
 
+def _ev_of(path):
+    """Extract the EV offset from a bracket filename like ``image_89.99_-4.jpg`` -> -4."""
+    stem = os.path.basename(path).rsplit('.', 1)[0]
+    return int(stem.rsplit('_', 1)[-1])
+
+
+def _template_ev_order(template_path):
+    """Return the per-angle EV offset sequence encoded in a Hugin template.
+
+    ``pto_template`` maps template image *i* to project image *i* by position, so
+    the project's ``imglist`` must follow the same within-angle EV order as the
+    template (e.g. ``[0, 2, -2, 4, -4]``). The first repeated EV marks the end of
+    the first angle group, so we return everything before it.
+    """
+    evs = []
+    with open(template_path) as f:
+        for line in f:
+            if line.startswith('i '):
+                m = re.search(r'n"([^"]+)"', line)
+                if m:
+                    try:
+                        evs.append(_ev_of(m.group(1)))
+                    except (ValueError, IndexError):
+                        pass
+    if not evs:
+        return None
+    seen = set()
+    for i, ev in enumerate(evs):
+        if ev in seen:
+            return evs[:i]
+        seen.add(ev)
+    return evs
+
+
+def _reorder_imglist(imglist, ev_order):
+    """Reorder ``imglist`` so each angle group follows ``ev_order``.
+
+    ``imglist`` is grouped by angle (contiguous blocks of ``len(ev_order)`` images
+    in capture order). Within each block we re-sort by the template's EV sequence
+    so positional template mapping lands priors on the correct frames.
+    """
+    m = len(ev_order)
+    reordered = []
+    for start in range(0, len(imglist), m):
+        group = imglist[start:start + m]
+        ev_to_img = {}
+        for p in group:
+            try:
+                ev_to_img.setdefault(_ev_of(p), p)
+            except (ValueError, IndexError):
+                reordered.append(p)  # unparseable EV: keep as-is
+        for ev in ev_order:
+            if ev in ev_to_img:
+                reordered.append(ev_to_img.pop(ev))
+        reordered.extend(ev_to_img.values())  # any EVs not in the template order
+    return reordered
+
+
 def hugin_modify(pto_path, new_project_path, width=6800):
     # Load the project file(pto_path)
     with open(pto_path, 'r') as file:
@@ -87,6 +146,12 @@ def hugin_modify(pto_path, new_project_path, width=6800):
 def hugin_stitch(config, nice=19):
     pto_path = config.pto_path
     output_path  = os.path.join(config.scan_dir, f'{config.scan_id}.jpg')
+
+    # Match the template's per-angle EV order so positional priors land on the
+    # correct frames (capture order is [-4,-2,0,2,4]; templates are [0,2,-2,4,-4]).
+    ev_order = _template_ev_order(config.template_path)
+    if ev_order:
+        config.imglist = _reorder_imglist(config.imglist, ev_order)
 
     # create Hugin project
     _run_hugin('pto_gen', '--projection=2', '--fov=360', '-o', pto_path, *config.imglist)  # *list -> unpack
@@ -135,6 +200,12 @@ def hugin_refine(config, nice=19, min_control_points=5):
     """
     pto_path = config.pto_path
     output_path = os.path.join(config.scan_dir, f'{config.scan_id}.jpg')
+
+    # Match the template's per-angle EV order so positional priors land on the
+    # correct frames (capture order is [-4,-2,0,2,4]; templates are [0,2,-2,4,-4]).
+    ev_order = _template_ev_order(config.template_path)
+    if ev_order:
+        config.imglist = _reorder_imglist(config.imglist, ev_order)
 
     # Create Hugin project
     _run_hugin('pto_gen', '--projection=2', '--fov=360', '-o', pto_path, *config.imglist)
