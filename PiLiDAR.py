@@ -95,10 +95,10 @@ try:
     # 360° SHOOTING PHOTOS
     if enable_cam:
         with Camera() as cam:
-            # CALIBRATE CAMERA: converge 3A and lock exposure/gain/AWB
+            # CALIBRATE CAMERA: converge 3A, measure scene illumination, compute manual setting
             print("Calibrating Camera...")
-            current_exposure_time, current_gain, current_awbgains = cam.estimate_parameters(config)
-            # print("[RESULT] AE:", current_exposure_time, "| Gain:", current_gain, "| AWB R:", round(current_awbgains[0],3), "B:", round(current_awbgains[1],3))
+            scene_ev, current_gain, current_exposure_time, current_awbgains = cam.estimate_parameters(config)
+            print("[RESULT] EV:", round(scene_ev, 4), "| Gain:", current_gain, "| Exposure:", round(current_exposure_time * 1000, 2), "ms | AWB R:", round(current_awbgains[0], 3), "B:", round(current_awbgains[1], 3))
 
             # switch to full-resolution stills for the panorama
             cam.configure(config.get("CAM", "dims"))
@@ -116,12 +116,12 @@ try:
                     print(f'\tEuler: x {format_value(euler.x, 2)} y {format_value(euler.y, 2)} z {format_value(euler.z, 2)}')
 
                 # take HDR photo
-                imgpaths = cam.take_hdr(path          = imgpath,
-                                        AEB           = config.get("CAM", "AEB"),
-                                        AEB_stops     = config.get("CAM", "AEB_STOPS"),
-                                        exposure_time = current_exposure_time,
-                                        gain          = current_gain,
-                                        awbgains      = current_awbgains)
+                imgpaths = cam.take_hdr(path      = imgpath,
+                                        ev        = scene_ev,
+                                        AEB       = config.get("CAM", "AEB"),
+                                        AEB_stops = config.get("CAM", "AEB_STOPS"),
+                                        awbgains  = current_awbgains,
+                                        max_exposure = config.get("CAM", "max_exposure"))
 
                 config.imglist.extend(imgpaths)
 

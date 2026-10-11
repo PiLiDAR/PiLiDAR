@@ -55,6 +55,51 @@ def choose_gain_exposure(auto_exposure, auto_gain, base_gain=1.0, max_gain=2.0, 
     return auto_exposure * auto_gain / gain, gain
 
 
+# ISO 100 == gain 1.0; the bracket uses ISO 100 / ISO 200.
+GAIN_LOW = 1.0    # ISO 100
+GAIN_HIGH = 2.0   # ISO 200
+
+
+def illumination(exposure_time, gain):
+    """Relative scene illumination captured by a frame: ``exposure_time × gain``.
+
+    The auto-exposure solves for this quantity and the HDR bracket scales it.
+    (Loosely an "EV"; strictly the captured light, with gain relative to ISO 100.)
+    """
+    return exposure_time * gain
+
+
+def ev_transform(ev, max_exposure=1.0, gain_low=GAIN_LOW, gain_high=GAIN_HIGH):
+    """Turn an illumination value ``ev`` into ``(gain, exposure_time)``.
+
+    Prefers the low ISO (``gain_low``, ISO 100); only if the required exposure
+    would exceed ``max_exposure`` seconds does it switch to the high ISO
+    (``gain_high``, ISO 200). There is no upper cap on the exposure once the
+    high ISO is chosen — a night scan may legitimately need seconds.
+    """
+    exposure = ev / gain_low
+    if max_exposure and exposure > max_exposure:
+        return gain_high, ev / gain_high
+    return gain_low, exposure
+
+
+def bracket_exposures(ev, steps, gain_low=GAIN_LOW, gain_high=GAIN_HIGH):
+    """Exposure set for an HDR bracket around ``ev``.
+
+    ``steps`` are EV offsets (e.g. ``[-2, -1, 0, 1, 2]``; positive = brighter).
+    The gain is **fixed per pass**: the low ISO for steps ≤ 0 and the high ISO
+    for steps > 0 (so the positive/bright steps need less shutter). The target
+    illumination is ``ev × 2**step``. Returns ``[(gain, exposure_time), ...]``
+    in the given step order.
+    """
+    out = []
+    for s in steps:
+        gain = gain_high if s > 0 else gain_low
+        target = ev * (2 ** s)
+        out.append((gain, target / gain))
+    return out
+
+
 class Camera:
     """A persistent Picamera2 session for the panorama rig.
 
@@ -179,14 +224,14 @@ class Camera:
 
     # -- calibration ---------------------------------------------------------
     def estimate_parameters(self, config):
-        """Converge 3A at preview resolution, read the result, and lock it.
+        """Converge 3A at the calibration resolution, read the result, and lock it.
 
-        Returns ``(exposure_time, gain, awbgains)`` in seconds / total linear
-        gain / ``[R, B]``.
+        Returns ``(illumination, gain, exposure_time, awbgains)``:
+        ``illumination`` = auto exposure × auto gain (the scene "EV"), ``gain`` /
+        ``exposure_time`` = the chosen manual setting for the base (EV 0) frame,
+        and ``awbgains`` = ``[R, B]``.
         """
         calibration_dims = config.get("CAM", "calibration_dims")
-        base_gain = config.get("CAM", "base_gain")
-        max_gain = config.get("CAM", "max_gain")
         max_exposure = config.get("CAM", "max_exposure")
 
         # converge 3A at a small resolution (faster than full-res); the result
@@ -201,14 +246,10 @@ class Camera:
 
         self._lock_3a()
 
-        # Take brightness from shutter time, not gain, to avoid ISO noise: use the
-        # lowest gain (ISO 100) unless that would need too long an exposure.
-        exposure_time, gain = choose_gain_exposure(
-            auto_exposure, auto_gain, base_gain=base_gain,
-            max_gain=max_gain, max_exposure=max_exposure,
-        )
+        ev = illumination(auto_exposure, auto_gain)
+        gain, exposure_time = ev_transform(ev, max_exposure=max_exposure)
 
-        return exposure_time, gain, awbgains
+        return ev, gain, exposure_time, awbgains
 
     # -- capture -------------------------------------------------------------
     def take_photo(self, path, exposure_time, gain, awbgains):
@@ -218,34 +259,27 @@ class Camera:
         """
         return self._capture_at(path, exposure_time, gain, awbgains)
 
-    def take_hdr(self, path, AEB, AEB_stops, exposure_time, gain, awbgains):
-        """Capture an HDR bracket by **shutter only** (constant gain).
+    def take_hdr(self, path, ev, AEB, AEB_stops, awbgains, max_exposure=1.0):
+        """Capture an HDR bracket around ``ev`` (the measured illumination).
 
-        The rig is stationary while shooting the panorama, so every frame is a
-        long exposure and there is no motion blur to trade against — bracketing
-        by shutter keeps the ISO low (hence low noise). The gain stays at the
-        calibrated (base) value for every frame; negative EV steps lengthen the
-        exposure and positive EV steps shorten it. The [ISO 100 vs 200] choice
-        and any exposure ceiling are handled in ``estimate_parameters()`` (see
-        ``choose_gain_exposure``); here the exposures simply scale from the
-        chosen base, however long that is.
-
-        Filenames carry the EV offset (``..._<ev>.jpg``) so the Hugin reorder
-        step can match them to the template's per-angle EV order.
+        The EV offsets are ``[-AEB*stops, …, 0, …, +AEB*stops]`` determined by
+        ``AEB`` (number of stops each side) and ``AEB_stops`` (step size). Gain
+        is fixed per pass — low ISO for the ≤0 (dark/neutral) frames and high ISO
+        for the >0 (bright) frames — so ISO noise stays low. Filenames carry the
+        EV offset (``..._<ev>.jpg``) so the Hugin reorder step can match them to
+        the template's per-angle EV order.
         """
         path_split = os.path.splitext(path)
         AEB = int(AEB)
-        stop_multiplier = 2 ** AEB_stops
+        steps = [s * AEB_stops for s in range(-AEB, AEB + 1)]
         paths = []
 
         self._lock_3a()
 
-        for step in range(-AEB, AEB + 1):
-            # shutter-only bracket: gain constant, exposure scales per stop
-            hdr_exposure_time = exposure_time * (stop_multiplier ** -step)
-            hdr_path = f"{path_split[0]}_{step * AEB_stops}{path_split[1]}"
+        for step, (gain, exposure_time) in zip(steps, bracket_exposures(ev, steps)):
+            hdr_path = f"{path_split[0]}_{step}{path_split[1]}"
             # capture-and-verify so the saved frame carries this exposure
-            self._capture_at(hdr_path, hdr_exposure_time, gain, awbgains)
+            self._capture_at(hdr_path, exposure_time, gain, awbgains)
             paths.append(hdr_path)
 
         return paths
