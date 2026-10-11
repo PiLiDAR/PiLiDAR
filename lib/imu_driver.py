@@ -14,18 +14,18 @@ class MPU6050Wrapper:
         self.mpu = MPU6050(self.i2c_bus, self.device_address, self.freq_divider)
         self.mpu.dmp_initialize()
         self.mpu.set_DMP_enabled(True)
-        
+
         self.packet_size = self.mpu.DMP_get_FIFO_packet_size()
         self.FIFO_buffer = [0]*64
 
         self.quat = None  # current Quaternion object
         self._lock = threading.Lock()
-        
+
         self.running = True
         self.thread = threading.Thread(target=self._read_mpu6050)
         self.thread.daemon = True
         self.thread.start()
-    
+
     def _read_mpu6050(self):
         while self.running:
             try:
@@ -42,21 +42,21 @@ class MPU6050Wrapper:
                         time.sleep(0.01)
                 else:
                     time.sleep(0.005)
-            except OSError as e:
+            except OSError:
                 time.sleep(0.01)
-    
+
     def get_euler_angles(self):
         with self._lock:
             if self.quat is None:
                 return None
             return self.mpu.DMP_get_euler_roll_pitch_yaw(self.quat)
-    
+
     def get_quat_values(self):
         with self._lock:
             if self.quat is None:
                 return None
             return np.array([self.quat.w, self.quat.x, self.quat.y, self.quat.z])
-    
+
     def close(self):
         self.running = False
         if self.thread.is_alive() and threading.current_thread() != self.thread:
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     config.init()
 
     imu = MPU6050Wrapper(config.get("IMU", "i2c_bus"), config.get("IMU", "device_address"), config.get("IMU", "frequency"))
-    
+
     try:
         time.sleep(0.5)  # wait for FIFO buffer to fill
         while True:

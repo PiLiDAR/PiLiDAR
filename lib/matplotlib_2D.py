@@ -30,7 +30,7 @@ class plot_2D:
 
     def __gray2rgb__(self, luminances):
         return np.column_stack((luminances, luminances, luminances))
-    
+
     def init(self):
         return self.ax,
 

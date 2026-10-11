@@ -137,7 +137,7 @@ def hugin_modify(pto_path, new_project_path, width=6800):
 
             lines[i] = " ".join(words)
             break
-    
+
     # Save the project file at new_project_path
     with open(new_project_path, 'w') as file:
         file.writelines(lines)
@@ -344,12 +344,12 @@ if __name__ == "__main__":
 
     config = Config()
     config.init(scan_id="240915-2326")
-    
+
 
     # Get all jpg files in the directory
     files = list_files(config.img_dir, filter="_0.jpg")
     print(len(files), "images found.")
-    
+
     config.imglist = files[0:4]
     print("imglist:", config.imglist)
 

@@ -40,12 +40,11 @@ def get_platform():
 platform = get_platform()
 
 if platform in ['Windows', 'Mac', 'Linux', 'RaspberryPi']:
-    import numpy as np
+    pass
 
 elif platform in ['Pico', 'Pico W', 'Metro M7']:
-    import board                    # type: ignore
-    from ulab import numpy as np    # type: ignore
-    
+    pass    # type: ignore
+
 
 def boardpin(pin):
     board = sys.modules['board']
@@ -59,7 +58,7 @@ def init_serial(port='/dev/ttyUSB0', baudrate=230400):
 def init_serial_MCU(pin='GP1', baudrate=230400):
     from busio import UART          # type: ignore
     return UART(None, boardpin(pin), baudrate=baudrate, bits=8, parity=None, stop=1)
-    
+
 
 def init_pwm_Pi(pwm_channel=0, frequency=30000):
     '''pwm_channel 0: GP18, pwm_channel 1: GP19'''

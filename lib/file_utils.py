@@ -56,7 +56,7 @@ def list_files(dir, ext=None, filter=None, recursive=False):
                 if ext is None or os.path.splitext(file)[1][1:] == ext:  # [1:] just removes the dot in ".jpg"
                     filepath = os.path.join(root, file)
                     filepaths.append(filepath)
-            
+
         if not recursive:
             break
     print(f"found: {len(filepaths)} {ext} files ({len(files)-len(filepaths)} other)")
@@ -106,4 +106,3 @@ if __name__ == "__main__":
 
     for i, (file, angle) in enumerate(zip(files, angles)):
         print(f"{i:03d}: {file}\t -> {angle:.2f}")
-    

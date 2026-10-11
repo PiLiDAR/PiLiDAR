@@ -79,7 +79,7 @@ if __name__ == "__main__":
     mesh = mesh_from_ball_pivoting(pcd)
     o3d.visualization.draw_geometries([mesh])
 
-    # poisson mesh 
+    # poisson mesh
     mesh = mesh_from_poisson(pcd, depth=10, k=50, estimate_normals=True, density_threshold=0.1)
 
 

@@ -48,16 +48,16 @@ def global_registration(source, target, voxel_size, fast=False, normals_nn=30, f
         source_down, target_down, source_fpfh, target_fpfh,
         o3d.pipelines.registration.FastGlobalRegistrationOption(
             maximum_correspondence_distance=dist_thres))
-        
+
     else: # RANSAC
         dist_thres = voxel_size * 1.5
         gr_result = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
             source_down, target_down, source_fpfh, target_fpfh, True, dist_thres,
             o3d.pipelines.registration.TransformationEstimationPointToPoint(False),
             3, [o3d.pipelines.registration.CorrespondenceCheckerBasedOnEdgeLength(edgelength),
-                o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(dist_thres)], 
+                o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(dist_thres)],
                 o3d.pipelines.registration.RANSACConvergenceCriteria(max_iteration, confidence))
-        
+
     return gr_result
 
 
@@ -68,13 +68,13 @@ def icp(source, target, transform, voxel_size, p2l=True, p2p_max_iteration=2000)
     if p2l:  # point-to-plane ICP
         method = o3d.pipelines.registration.TransformationEstimationPointToPlane()
         reg_icp = o3d.pipelines.registration.registration_icp(source, target, dist_thres, transform, method)
-    
+
     else:  # point-to-point ICP
         method = o3d.pipelines.registration.TransformationEstimationPointToPoint()
         reg_icp = o3d.pipelines.registration.registration_icp(
             source, target, dist_thres, transform, method,
             o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=p2p_max_iteration))
-    
+
     return reg_icp
 
 # COLORED POINT CLOUD REGISTRATION
@@ -103,7 +103,7 @@ def color_icp(source, target, transform, normals_nn=30):
                                                             relative_rmse=1e-6,
                                                             max_iteration=iter))
         current_transformation = result_icp.transformation
-        
+
     return result_icp
 
 
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     start = time.time()
     reg_gr = global_registration(source, target, voxel_size, fast=fast_gr)
     print("GR duration:", time.time() - start)
-    
+
     if platform == 'Windows':
         visualize([source, target], transformation=reg_gr.transformation, point_colors="uniform", view=view, point_size=point_size)
 
@@ -161,11 +161,11 @@ if __name__ == "__main__":
     print("ICP duration:", time.time() - start)
 
     print("ICP:", reg_icp)
-    
+
     if platform == 'Windows':
         visualize([source, target], transformation=reg_icp.transformation, point_colors="uniform", view=view, point_size=point_size)
 
-    
+
     # EXPORT TRANSFORMED POINT CLOUDS
     transformed_source = transform(source, transformation=reg_icp.transformation)
     save_pointcloud(transformed_source + target, "scans/registration_test.ply")
@@ -175,9 +175,9 @@ if __name__ == "__main__":
     # COLORED POINT CLOUD REGISTRATION
     if platform == 'Windows':
         visualize([source, target], view=view, transformation=reg_gr.transformation, point_size=point_size)
-    
+
     reg_color = color_icp(source, target,reg_gr.transformation)
     #print(result_icp)
-    
+
     if platform == 'Windows':
         visualize([source, target], transformation=reg_color.transformation, view=view, point_size=point_size)

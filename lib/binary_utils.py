@@ -6,7 +6,7 @@ def hex_from_bytes(byte_string, spaced=False):
     resulting string is therefore twice as long as the length of data.
     """
     hex_string = binascii.hexlify(byte_string).decode('ascii')
-    
+
     if spaced:
         hex_string = ' '.join([hex_string[i:i+2] for i in range(0, len(hex_string), 2)])
 
@@ -29,13 +29,13 @@ def shift_bytes(data, shift=1):
 
 if __name__ == '__main__':
     # # EXAMPLE DATA
-    hex_list = ['10', '0e', '53', '2b', '04', '01', 'ec', '13', 
-                '01', 'ea', '1a', '01', 'ea', '1e', '01', 'ea', '26', '01', 
-                'e9', '31', '01', 'e8', '29', '01', 'eb', '2c', '01', 'e9', 
-                '2d', '01', 'eb', '34', '01', 'e8', '38', '01', 'e5', '4e', 
+    hex_list = ['10', '0e', '53', '2b', '04', '01', 'ec', '13',
+                '01', 'ea', '1a', '01', 'ea', '1e', '01', 'ea', '26', '01',
+                'e9', '31', '01', 'e8', '29', '01', 'eb', '2c', '01', 'e9',
+                '2d', '01', 'eb', '34', '01', 'e8', '38', '01', 'e5', '4e',
                 '01', 'd9', 'e4', '2e', '57', '0b', 'd3', '54', '2c']
     #len(hex_list) = 47
-    
+
     hex_string_spaced = ' '.join(hex_list)
     byte_string = bytes_from_hex(hex_string_spaced, spaced=True)
     print("\nbyte_string:\n", byte_string, "\n")

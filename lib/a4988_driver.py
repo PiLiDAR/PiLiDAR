@@ -10,12 +10,12 @@ import RPi.GPIO as GPIO     # type: ignore
 from time import sleep
 
 class A4988:
-    def __init__(self, dir_pin, step_pin, ms_pins, 
-                 delay=0.001, step_angle=1.8, microsteps=16, 
+    def __init__(self, dir_pin, step_pin, ms_pins,
+                 delay=0.001, step_angle=1.8, microsteps=16,
                  gear_ratio=1.0, verbose=False):
-        
+
         # Disable warnings
-        GPIO.setwarnings(verbose) 
+        GPIO.setwarnings(verbose)
 
         GPIO.setmode(GPIO.BCM)
 
@@ -28,7 +28,7 @@ class A4988:
         self.ms_pins = ms_pins
         for pin in self.ms_pins:
             GPIO.setup(pin, GPIO.OUT)
-        
+
         self.current_steps = 0  # internal absolute angle
 
         self.step_angle = step_angle
@@ -51,7 +51,7 @@ class A4988:
 
     def get_steps_for_angle(self, angle):
         return int((angle / self.step_angle) * self.microsteps * self.gear_ratio)
-    
+
     def get_angle_for_steps(self, steps):
         return (steps / (self.microsteps * self.gear_ratio)) * self.step_angle
 
@@ -68,7 +68,7 @@ class A4988:
         self.set_direction(direction)
         for _ in range(steps):
             self.step()
-        
+
         # update current steps considering direction
         self.current_steps += steps if not direction else -steps
 
@@ -100,7 +100,7 @@ class A4988:
         if mod:
             current_angle %= 360
         return current_angle
-    
+
     def close(self):
         #GPIO.setmode(GPIO.BCM)
         GPIO.cleanup(self.ms_pins)
@@ -117,17 +117,17 @@ if __name__ == "__main__":
     config.init(scan_id="_")
 
     config.update_target_res(1.)
-    
+
     scan_delay = config.get("STEPPER", "SCAN_DELAY")  # 1 / (SAMPLING_RATE * TARGET_RES / 360)
-    
+
     # initialize stepper
-    stepper = A4988(config.get("STEPPER", "pins", "DIR_PIN"), 
-                    config.get("STEPPER", "pins", "STEP_PIN"), 
-                    config.get("STEPPER", "pins", "MS_PINS"), 
+    stepper = A4988(config.get("STEPPER", "pins", "DIR_PIN"),
+                    config.get("STEPPER", "pins", "STEP_PIN"),
+                    config.get("STEPPER", "pins", "MS_PINS"),
                     delay      = config.get("STEPPER", "STEP_DELAY"),  # 0.001
                     step_angle = config.get("STEPPER", "STEP_ANGLE"),  # 360 / STEPPER_RES
                     microsteps = config.get("STEPPER", "MICROSTEPS"),  # 16
-                    gear_ratio = config.get("STEPPER", "GEAR_RATIO"))  # 1 + 38/14 
+                    gear_ratio = config.get("STEPPER", "GEAR_RATIO"))  # 1 + 38/14
 
 
     # # TEST: MOVE FULL 360° FORWARD AND BACKWARD
@@ -144,7 +144,7 @@ if __name__ == "__main__":
             print(f"Photo {i+1} at {round(stepper.get_current_angle(), 2)}°")
             sleep(0.5) # delay for photo
             stepper.move_to_angle(90 * (i+1))
-        
+
         stepper.move_to_angle(0)
         stepper.move_steps(1)  # compensate negative value caused by rounding
         sleep(1)
@@ -158,6 +158,6 @@ if __name__ == "__main__":
 
         print(f"reached {round(stepper.get_current_angle(), 2)}° (current steps: {stepper.current_steps}), returning ..")
         stepper.move_to_angle(0)
-        
+
     finally:
         stepper.close()

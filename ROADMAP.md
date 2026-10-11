@@ -34,8 +34,7 @@ The project follows a disciplined engineering pipeline:
 
 ---
 
-## Phase 0 — Foundation, CI/CD, and Mock Testing Harness
-**Timeline:** 2–3 weeks  
+## Phase 0 — Foundation, CI/CD, and Mock Testing Harness — ✅ done (v2.4.0)
 **Objective:** Modernize tooling, decouple development from physical hardware, and establish automated regression testing.
 
 ### Goals
@@ -44,20 +43,17 @@ The project follows a disciplined engineering pipeline:
 - Prevent regression while refactoring legacy components.
 
 ### Tasks
-- **Modern Python Packaging**
-  - Transition from loose scripts and unpinned `requirements.txt` to standard `pyproject.toml`.
-  - Define explicit dependency groups: `pi-hardware` (GPIO, camera), `processing` (Open3D, OpenCV, SciPy), and `dev` (pytest, ruff).
-  - Modernize platform detection in `lib/platform_utils.py` using kernel and device-tree checks instead of brittle architecture strings.
-- **Hardware Mocking & Packet Replay Harness**
-  - Build `MockLidarSerial` to simulate serial streams by replaying recorded raw byte streams for LD06 and STL27L.
-  - Implement a mock camera and mock stepper driver for desktop simulation and headless environments.
-  - Check in a minimal, anonymized synthetic sample scan dataset under `tests/fixtures/`.
-- **Automated Testing & CI Pipeline**
-  - Implement `pytest` test suite covering:
-    - CRC8 validation and corrupted packet recovery.
-    - Polar-to-Cartesian transforms and geometric offsets.
-    - Point cloud loading, downsampling, and export formatting.
-  - Add GitHub Actions CI workflow for automated linting (`ruff`), type checks, and running test suites across Linux, macOS, and Windows.
+- **Modern Python Packaging** — ✅ done (v2.4.0, `pyproject.toml`)
+  - ~~Transition from loose scripts and unpinned `requirements.txt` to standard `pyproject.toml`.~~ → `pyproject.toml` is now the source of truth for metadata + dependencies; `requirements.txt` retained for the Pi bootstrap.
+  - ~~Define explicit dependency groups: `pi-hardware` (GPIO, camera), `processing` (Open3D, OpenCV, SciPy), and `dev` (pytest, ruff).~~ → `pi-hardware` and `dev` optional-dependency groups defined; core processing deps in the base `dependencies`.
+  - ~~Modernize platform detection in `lib/platform_utils.py` using kernel and device-tree checks instead of brittle architecture strings.~~ → done in v2.0.0 (device-tree `/proc/device-tree/model` + `/etc/rpi-issue`).
+- **Hardware Mocking & Packet Replay Harness** — ✅ done (v2.4.0, `tests/mock_hardware.py`)
+  - ~~Build `MockLidarSerial` to simulate serial streams by replaying recorded raw byte streams for LD06 and STL27L.~~ → `MockLidarSerial` + `build_packet()`/`crc8()` synthesise valid packets from the project CRC table; `tests/fixtures/capture.bin` is a replayable stream.
+  - ~~Implement a mock camera and mock stepper driver for desktop simulation and headless environments.~~ → `MockCamera` and `MockStepper` stand-ins added.
+  - ~~Check in a minimal, anonymized synthetic sample scan dataset under `tests/fixtures/`.~~ → `synthetic_lidar.pkl` + `lidar/` slice dir checked in; regenerate via `python tests/make_fixture.py`.
+- **Automated Testing & CI Pipeline** — ✅ done (v2.4.0, `tests/`, `.github/workflows/ci.yml`)
+  - ~~Implement `pytest` test suite covering CRC8 validation and corrupted packet recovery, polar-to-Cartesian transforms and geometric offsets, and point cloud loading.~~ → 25 tests across `test_crc.py`, `test_packet.py`, `test_pointcloud.py`, `test_harness.py`.
+  - ~~Add GitHub Actions CI workflow for automated linting (`ruff`) and running test suites across Linux, macOS, and Windows.~~ → matrix over 3 OSes × Python 3.11/3.12.
 
 ### Deliverables
 - `pyproject.toml` configuration and clean virtual environment setup.
@@ -65,12 +61,11 @@ The project follows a disciplined engineering pipeline:
 - Working `pytest` suite running in automated GitHub Actions CI.
 
 ### Success criteria
-The test suite passes in CI on desktop machines without physical hardware or Raspberry Pi peripherals connected.
+The test suite passes in CI on desktop machines without physical hardware or Raspberry Pi peripherals connected. ✅ (25/25 pass locally on desktop)
 
 ---
 
-## Phase 1 — Hardware Abstraction & High-Speed Acquisition Stack
-**Timeline:** 4–6 weeks  
+## Phase 1 — Hardware Abstraction & High-Speed Acquisition Stack 
 **Objective:** Harden the acquisition layer for modern Raspberry Pi OS, eliminate serial packet drops at high baudrates, and ensure reliable motion control.
 
 ### Goals
@@ -107,8 +102,7 @@ A full 180° sweep with the STL27L captures continuously at 921,600 baud with 0 
 
 ---
 
-## Phase 2 — Open Data Standards & Geometric Calibration
-**Timeline:** 3–4 weeks  
+## Phase 2 — Open Data Standards & Geometric Calibration 
 **Objective:** Replace unversioned pickle storage with open, standardized file formats and establish rigorous calibration procedures.
 
 ### Goals
@@ -146,8 +140,7 @@ Scans can be opened and visualized in third-party tools (CloudCompare, MeshLab, 
 
 ---
 
-## Phase 3 — Unified CLI & Processing Pipeline Engine
-**Timeline:** 3–4 weeks  
+## Phase 3 — Unified CLI & Processing Pipeline Engine 
 **Objective:** Replace scattered root scripts with a clean, modular CLI and a deterministic end-to-end processing pipeline.
 
 ### Goals
@@ -179,8 +172,7 @@ Running `pilidar process <scan_dir>` turns a raw capture folder into a clean, ve
 
 ---
 
-## Phase 4 — Field Usability: Local Web UI & Remote Operation
-**Timeline:** 3–4 weeks  
+## Phase 4 — Field Usability: Local Web UI & Remote Operation 
 **Objective:** Make PiLiDAR practical in the field on a tripod without requiring an SSH session or tethered monitor.
 
 ### Goals
@@ -210,8 +202,7 @@ A user can set up the scanner on a tripod, connect via mobile phone, preview fra
 
 ---
 
-## Phase 5 — Multi-Scan Registration & Advanced Reconstruction
-**Timeline:** 4–5 weeks  
+## Phase 5 — Multi-Scan Registration & Advanced Reconstruction 
 **Objective:** Merge multiple station scans into an accurate, complete 3D scene.
 
 ### Goals
@@ -241,8 +232,7 @@ Multiple overlapping scans align into a cohesive 3D model with measurable regist
 
 ---
 
-## Phase 6 — Packaging, Documentation & Community Release
-**Timeline:** 2–3 weeks  
+## Phase 6 — Packaging, Documentation & Community Release  
 **Objective:** Polish the project for external builders, makers, and contributors.
 
 ### Goals

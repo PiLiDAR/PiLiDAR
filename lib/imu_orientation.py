@@ -54,7 +54,7 @@ class Orientation:
         if degrees:
             euler = rad2deg(euler)
         return euler
-    
+
     @staticmethod
     def get_rpy(quat, degrees=False):
         # Convert to RPY angles
@@ -92,7 +92,7 @@ if __name__ == '__main__':
 
     q_list_int16 = np.load('scans/quaternion_test.npz')['quat']  # TODO: load from raw_data["quaternion"] instead
     orientation = Orientation(q_list_int16, degrees=True)
-    
+
 
     for i, euler_angles in enumerate(orientation.euler_list):
         print(f"Euler {i}: {euler_angles.x:.3} {euler_angles.y:.3} {euler_angles.z:.3}")

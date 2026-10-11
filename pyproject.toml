@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pilidar"
+version = "2.4.0"
+description = "Open-source, low-cost DIY 360° LiDAR scanner and panoramic 3D reconstruction system"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "matplotlib>=3.9.2",
+    "plotly>5.24.0",
+    "pyserial>=3.5",
+    "scipy>=1.12.0",
+    "open3d>=0.18.0",
+    "opencv-python>=4.10",
+    "pye57>=0.4.12",
+    "jupyter",
+    "quat>=1.0.0",
+    "mpu6050>=0.0.3",
+]
+
+[project.optional-dependencies]
+pi-hardware = [
+    "rpi-lgpio>=0.6",
+    # picamera2 ships with Raspberry Pi OS (libcamera); not pip-installable
+]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.4.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["lib*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E501",  # line length handled by formatter
+    "E722",  # bare except used intentionally in lib/*/import fallback blocks
+]

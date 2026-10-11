@@ -72,9 +72,9 @@ def __validate_object_list__(object_list):
         print(e)
 
 
-def visualize(object_list, title="PiLiDAR", transformation=None, fullscreen=True, size=(1280,720), view="front", point_size=1, 
+def visualize(object_list, title="PiLiDAR", transformation=None, fullscreen=True, size=(1280,720), view="front", point_size=1,
               unlit=False, backface=True, point_colors="color", bgcolor=(0.15, 0.15, 0.15), enable_fallback=True):
-    
+
     object_list = __validate_object_list__(object_list)
 
     if enable_fallback:
@@ -86,13 +86,13 @@ def visualize(object_list, title="PiLiDAR", transformation=None, fullscreen=True
     else:
         uniform_colors = False
 
-    point_color_option = {"x"       : o3d.visualization.PointColorOption.XCoordinate, 
-                          "y"       : o3d.visualization.PointColorOption.YCoordinate, 
-                          "z"       : o3d.visualization.PointColorOption.ZCoordinate, 
-                          "normal"  : o3d.visualization.PointColorOption.Normal, 
+    point_color_option = {"x"       : o3d.visualization.PointColorOption.XCoordinate,
+                          "y"       : o3d.visualization.PointColorOption.YCoordinate,
+                          "z"       : o3d.visualization.PointColorOption.ZCoordinate,
+                          "normal"  : o3d.visualization.PointColorOption.Normal,
                           "color"   : o3d.visualization.PointColorOption.Color
                           }[point_colors.lower()]
-    
+
     # Deepcopy to avoid modifying the original data
     if transformation is not None or point_color_option == 5:
         object_list = copy.deepcopy(object_list)
@@ -101,10 +101,10 @@ def visualize(object_list, title="PiLiDAR", transformation=None, fullscreen=True
         # for i, object in enumerate(object_list):
         #     object_list[i] = transform(object, transformation=transformation)
         object_list[0] = transform(object_list[0], transformation=transformation)  # only transform the first object
-    
+
     if uniform_colors:
         object_list = copy.deepcopy(object_list)
-        
+
         colors = __generate_colors__(len(object_list), float=True)
         for i, object in enumerate(object_list):
             object_list[i].paint_uniform_color(colors[i])
@@ -112,7 +112,7 @@ def visualize(object_list, title="PiLiDAR", transformation=None, fullscreen=True
     views = {"top":     {"zoom": 0.1,   "front": (0, 0, 1),     "lookat": (0, 0, 0),    "up": (0, 1, 0)},
              "front":   {"zoom": 0.1,   "front": (0, -1, 0),    "lookat": (0, 0, 0),    "up": (0, 0, 1)},
              "overview":{"zoom": 0.2,   "front": (-1, -1, 1),   "lookat": (0, 0, 0),    "up": (0, 0, 1)}}
-    
+
     if isinstance(view, dict):
         # custom view
         v = view
@@ -122,7 +122,7 @@ def visualize(object_list, title="PiLiDAR", transformation=None, fullscreen=True
     else:
         print("[Error] Invalid view. defaulting to front view")
         v = views["front"]
-    
+
     vis = o3d.visualization.Visualizer()
 
     if fullscreen:
@@ -134,7 +134,7 @@ def visualize(object_list, title="PiLiDAR", transformation=None, fullscreen=True
     for obj in object_list:
         pcd = obj.to_legacy() if isinstance(obj, o3d.t.geometry.PointCloud) else obj
         vis.add_geometry(pcd)
-    
+
     # Set the view parameters
     view_control = vis.get_view_control()
     lookat = object_list[0].get_center() if v["lookat"] is None else v["lookat"]
@@ -142,7 +142,7 @@ def visualize(object_list, title="PiLiDAR", transformation=None, fullscreen=True
     view_control.set_zoom(v["zoom"])
     view_control.set_front(v["front"])
     view_control.set_up(v["up"])
-    
+
     # Set the background color to dark gray
     render_option = vis.get_render_option()
     render_option.background_color = np.asarray(bgcolor)
@@ -161,15 +161,15 @@ def visualize_simple(object_list, uniform_colors=False, view="front", enable_fal
 
     if uniform_colors:
         object_list = copy.deepcopy(object_list)
-        
+
         colors = __generate_colors__(len(object_list), float=True)
         for i, object in enumerate(object_list):
             object_list[i].paint_uniform_color(colors[i])
-    
+
 
     views = {"top":   {"zoom": 0.5, "front": (0, 0, 10), "lookat": (1, 0, 0), "up": (0, -1, 0)},
              "front": {"zoom": 0.25, "front": (-1, 4, 1), "lookat": (0, 0, 0), "up": (0, 0, 1)}}
-    
+
     if isinstance(view, dict):
         # custom view
         v = view
@@ -179,7 +179,7 @@ def visualize_simple(object_list, uniform_colors=False, view="front", enable_fal
     else:
         print("[Error] Invalid view. defaulting to top view")
         v = views["top"]
-        
+
     o3d.visualization.draw_geometries(object_list, mesh_show_back_face=True, zoom=v["zoom"], front=v["front"], lookat=v["lookat"], up=v["up"])
 
 

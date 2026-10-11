@@ -3,6 +3,18 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-10-11
+
+### Added
+- **Modern packaging (`pyproject.toml`):** Replaces the unpinned `requirements.txt` as the source of truth for metadata and dependencies. Defines optional dependency groups: `pi-hardware` (GPIO/camera) and `dev` (pytest, ruff). Configures `pytest` and `ruff` (`E`/`F`/`W` rules).
+- **Hardware mocking & packet-replay harness (`tests/mock_hardware.py`):** `MockLidarSerial` (a `serial.Serial`-compatible in-memory reader), `build_packet()`/`crc8()` to synthesise valid LiDAR packets from the project's CRC table, plus `MockStepper` and `MockCamera` stand-ins. Lets the acquisition path run on desktop/CI with no GPIO, camera, or serial hardware.
+- **Synthetic test fixtures (`tests/fixtures/`):** A checked-in anonymised scan (`synthetic_lidar.pkl`), a matching `lidar/` slice directory, and a raw byte-stream `capture.bin` for replay. Regenerate with `python tests/make_fixture.py`.
+- **`pytest` suite (`tests/`, 25 tests):** Covers CRC8 validation and corrupted-packet recovery, the packet `decode()` path (including the LSA<FSA angle wraparound), `read()` byte-stream resync, polar-to-Cartesian transforms, point-cloud merge/NaN removal, `pcd_from_np()` 2D/3D assembly, and fixture loading.
+- **GitHub Actions CI (`.github/workflows/ci.yml`):** Runs `ruff check` and `pytest` across Linux, macOS, and Windows on Python 3.11 and 3.12 — no physical hardware required.
+
+### Changed
+- **`lib/*` formatting:** Applied `ruff` safe fixes (whitespace, unused imports) across the library. Bare `except:` in import-fallback blocks are intentionally retained (`E722` ignored in config).
+
 ## [2.3.0] - 2026-10-11
 
 ### Removed

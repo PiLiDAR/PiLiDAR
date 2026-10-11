@@ -59,7 +59,7 @@ class Config:
         if scans_root is not None:
             self.set(scans_root, "SCANS_ROOT")
         self.scans_root = os.path.join(self.base_dir, self.get("SCANS_ROOT"))
-        
+
         # write hex strings back to dict:
         protocol = self.dict["LIDAR"]["protocol"]
         # start_byte
@@ -75,12 +75,12 @@ class Config:
             crc_table = json.load(file)["CRC_TABLE"]
         self.crc_table = [int(hex_str, 16) for hex_str in crc_table]
         self.set(self.crc_table, "LIDAR", "protocol", "CRC_TABLE")
-        
-        
+
+
         self.platform = get_platform()
         self.set_device(self.get("LIDAR", "DEVICE"))
-        
-        
+
+
         # STEPPER
         self.STEPPER_RES = self.get("STEPPER", "STEPPER_RES")
         self.MICROSTEPS = self.get("STEPPER", "MICROSTEPS")
@@ -109,19 +109,19 @@ class Config:
     def init(self, scan_id=None):
         ## TODO: fix power control issues
         ## RELAY
-        # GPIO.output(relay_pin, 1)  # enable Power relay 
+        # GPIO.output(relay_pin, 1)  # enable Power relay
         ## USB HUB
         #bsubprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "on"])  # enable USB Hub Power
         ## LIDAR
         # self.serial_connection.write(b'1')  # start STL27L motor
         # self.serial_connection.write(b'0')  # stop STL27L motor
-        
-        
+
+
         if scan_id is not None:
             self.scan_id = scan_id
         else:
             self.scan_id = datetime.datetime.now().strftime("%y%m%d-%H%M")
-        
+
         self.scan_dir           = os.path.join(self.scans_root, self.scan_id)
         self.pto_path           = os.path.join(self.scan_dir, f'{self.scan_id}.pto')
         self.pano_path          = os.path.join(self.scan_dir, f'{self.scan_id}{self.get("PANO", "OUTPUT_NAME")}')
@@ -130,10 +130,10 @@ class Config:
         self.filtered_pcd_path  = os.path.join(self.scan_dir, f'{self.scan_id}_filtered.{self.get("3D", "EXT")}')
 
         self.lidar_dir = os.path.join(self.scan_dir, "lidar")         # TODO remove -> npy files replaced by single pkl file
-        
+
         self.img_dir   = make_dir(os.path.join(self.scan_dir, "img"))
         self.tmp_dir   = make_dir(os.path.join(self.scan_dir, "tmp"))
-        
+
         self.imglist = []
 
 
@@ -155,14 +155,14 @@ class Config:
             self.gpio_setup()  # enable GPIO Ports
 
             self.PORT = self.get("LIDAR", self.DEVICE , "PORT")
-            if not os.path.exists(self.PORT): 
+            if not os.path.exists(self.PORT):
                 # if USB controller board is not connected, try serial port
                 self.PORT = self.get("LIDAR", "GPIO_SERIAL", "PORT")
-            
+
             # disable filtering on Raspberry Pi as it is computationally too expensive
             if not self.get("FILTERING", "FILTER_ON_PI"):
                 self.set(False, "ENABLE_FILTERING")
-        
+
         elif self.platform == 'Windows':
             self.PORT = self.get("LIDAR", self.DEVICE , "PORT_WIN")
             # disable GPIO-serial settings
@@ -174,7 +174,7 @@ class Config:
         for key in args:
             value = value[key]
         return value
-    
+
     def set(self, value, *args):
         d = self.dict
         for key in args[:-1]:
@@ -202,7 +202,7 @@ class Config:
             import RPi.GPIO as GPIO  # type: ignore
             GPIO.setmode(GPIO.BCM)
             GPIO.setwarnings(debug)
-            
+
             # power relay
             relay_pin = self.get("STEPPER", "RELAY_PIN")
             GPIO.setup(relay_pin, GPIO.OUT)
