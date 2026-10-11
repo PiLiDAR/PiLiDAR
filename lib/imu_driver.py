@@ -14,14 +14,27 @@ _NORM_TOL = 0.10               # accept +-10% of the unit norm
 
 
 class MPU6050Wrapper:
-    def __init__(self, i2c_bus=3, device_address=0x68, freq=50):
+    def __init__(self, i2c_bus=3, device_address=0x68, freq=50, retries=5, retry_delay=0.3):
         self.i2c_bus = i2c_bus
         self.device_address = device_address
         self.freq_divider = int(200 / freq)  # 0x04
 
-        self.mpu = MPU6050(self.i2c_bus, self.device_address, self.freq_divider)
-        self.mpu.dmp_initialize()
-        self.mpu.set_DMP_enabled(True)
+        # The DMP firmware upload intermittently fails with an I2C EIO/EREMOTEIO
+        # even though the chip answers at its address (observed on the Pi). A
+        # single glitch would otherwise silently disable the IMU + leveling for
+        # the whole scan, so retry a few times before giving up.
+        last_error = None
+        for _ in range(max(1, retries)):
+            try:
+                self.mpu = MPU6050(self.i2c_bus, self.device_address, self.freq_divider)
+                self.mpu.dmp_initialize()
+                self.mpu.set_DMP_enabled(True)
+                break
+            except OSError as e:
+                last_error = e
+                time.sleep(retry_delay)
+        else:
+            raise last_error
 
         self.packet_size = self.mpu.DMP_get_FIFO_packet_size()
         self.FIFO_buffer = [0]*64
