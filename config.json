@@ -71,18 +71,9 @@
     "CAM": {
         "preview_dims": [320, 240],
         "dims": [4056,3040],
-        "preview_denoise": "cdn_off",
-        "denoise": "cdn_fast",
-        "awbgains": [1, 1],
-        "max_iterations": 10,
-        "awb_thres": 0.01,
         "set_gain": 1,
-        "sharpness": 0.5,
-        "saturation": 0.8,
         "AEB": 1,
-        "AEB_STOPS": 2,
-        "raw": false,
-        "remove_tmp": false
+        "AEB_STOPS": 2
     },
 
     "IMU": {

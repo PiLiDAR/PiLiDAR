@@ -6,16 +6,7 @@ from lib.a4988_driver import A4988
 from lib.imu_driver import MPU6050Wrapper
 from lib.config import Config, format_value
 from lib.pointcloud import process_raw, save_raw_scan, get_scan_dict
-# Camera backend: prefer native Picamera2 (persistent session, proper 3A
-# settle -> read -> lock); fall back to the rpicam-still subprocess path when
-# picamera2 isn't available (e.g. on a desktop without the camera stack).
-try:
-    import picamera2  # noqa: F401
-    from lib.picam2_utils import take_HDR_photo, estimate_camera_parameters
-    CAMERA_BACKEND = "picamera2"
-except ImportError:
-    from lib.rpicam_utils import take_HDR_photo, estimate_camera_parameters
-    CAMERA_BACKEND = "rpicam-still"
+from lib.picam2_utils import Camera
 from lib.pano_utils import hugin_stitch, hugin_refine
 
 
@@ -62,11 +53,10 @@ if enable_lidar:
 
         # # DEBUG: take photo at each step
         # imgpath = os.path.join(config.scan_dir, f"{format_value(lidar.z_angle, 2)}.jpg")
-        # take_photo(path=imgpath,
-        #            exposure_time=current_exposure_time, 
-        #            gain=current_gain,
-        #            awbgains=current_awbgains,
-        #            denoise="cdn_fast")
+        # cam.take_photo(path=imgpath,
+        #                exposure_time=current_exposure_time,
+        #                gain=current_gain,
+        #                awbgains=current_awbgains)
 
         if enable_IMU:
             # euler = imu.get_euler_angles()
@@ -82,45 +72,44 @@ if enable_lidar:
 try:
     # 360° SHOOTING PHOTOS
     if enable_cam:
-        # CALIBRATE CAMERA: converge 3A and lock exposure/gain/AWB
-        print(f"Calibrating Camera (backend: {CAMERA_BACKEND})...")
-        current_exposure_time, current_gain, current_awbgains = estimate_camera_parameters(config)
-        # print("[RESULT] AE:", current_exposure_time, "| Gain:", current_gain, "| AWB R:", round(current_awbgains[0],3), "B:", round(current_awbgains[1],3))
+        with Camera() as cam:
+            # CALIBRATE CAMERA: converge 3A and lock exposure/gain/AWB
+            print("Calibrating Camera...")
+            current_exposure_time, current_gain, current_awbgains = cam.estimate_parameters(config)
+            # print("[RESULT] AE:", current_exposure_time, "| Gain:", current_gain, "| AWB R:", round(current_awbgains[0],3), "B:", round(current_awbgains[1],3))
 
-        IMGCOUNT = config.get("PANO", "IMGCOUNT")
-        for i in range(IMGCOUNT):
-            lidar.z_angle = stepper.get_current_angle()
-            formatted_angle = format_value(lidar.z_angle, config.get("ANGULAR_DIGITS"))
+            # switch to full-resolution stills for the panorama
+            cam.configure(config.get("CAM", "dims"))
 
-            print(f"\nTaking photo {i+1}/{IMGCOUNT} | Angle: {formatted_angle}")            
-            imgpath = os.path.join(config.img_dir, f"image_{formatted_angle}.jpg")
-            
-            if enable_IMU:
-                euler = imu.get_euler_angles()
-                print(f'\tEuler: x {format_value(euler.x, 2)} y {format_value(euler.y, 2)} z {format_value(euler.z, 2)}')
+            IMGCOUNT = config.get("PANO", "IMGCOUNT")
+            for i in range(IMGCOUNT):
+                lidar.z_angle = stepper.get_current_angle()
+                formatted_angle = format_value(lidar.z_angle, config.get("ANGULAR_DIGITS"))
 
-            # take HDR photo
-            imgpaths = take_HDR_photo(AEB           = config.get("CAM", "AEB"), 
-                                      AEB_stops     = config.get("CAM", "AEB_STOPS"),
-                                      path          = imgpath, 
-                                      exposure_time = current_exposure_time, 
-                                      gain          = current_gain, 
-                                      awbgains      = current_awbgains, 
-                                      denoise       = config.get("CAM", "denoise"),
-                                      sharpness     = config.get("CAM", "sharpness"),
-                                      saturation    = config.get("CAM", "saturation"),
-                                      save_raw      = config.get("CAM", "raw"), 
-                                      blocking      = True)
-            
-            config.imglist.extend(imgpaths)
+                print(f"\nTaking photo {i+1}/{IMGCOUNT} | Angle: {formatted_angle}")            
+                imgpath = os.path.join(config.img_dir, f"image_{formatted_angle}.jpg")
+                
+                if enable_IMU:
+                    euler = imu.get_euler_angles()
+                    print(f'\tEuler: x {format_value(euler.x, 2)} y {format_value(euler.y, 2)} z {format_value(euler.z, 2)}')
 
-            # rotate stepper to next photo angle
-            stepper.move_to_angle((360/IMGCOUNT) * (i+1))
+                # take HDR photo
+                imgpaths = cam.take_hdr(path          = imgpath,
+                                        AEB           = config.get("CAM", "AEB"),
+                                        AEB_stops     = config.get("CAM", "AEB_STOPS"),
+                                        exposure_time = current_exposure_time,
+                                        gain          = current_gain,
+                                        awbgains      = current_awbgains)
+
+                config.imglist.extend(imgpaths)
+
+                # rotate stepper to next photo angle
+                stepper.move_to_angle((360/IMGCOUNT) * (i+1))
+                sleep(0.5)
+
+            stepper.move_to_angle(0)
+            stepper.move_steps(1)
             sleep(0.5)
-        
-        stepper.move_to_angle(0)
-        stepper.move_steps(1)
-        sleep(0.5)
 
 
     # 180° SCAN

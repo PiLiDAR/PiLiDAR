@@ -3,6 +3,16 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-10-11
+
+### Removed
+- **`rpicam-still` backend (`lib/rpicam_utils.py`):** Deleted. The native Picamera2 path is now the only camera backend (the project runs on the Pi, where the libcamera stack is always present). This also drops the `exifread` dependency and the rpicam-only `CAM` config keys (`denoise`, `preview_denoise`, `sharpness`, `saturation`, `awbgains`, `max_iterations`, `awb_thres`, `raw`, `remove_tmp`).
+- **Module-level wrappers (`lib/picam2_utils.py`):** Removed `estimate_camera_parameters()` / `take_photo()` / `take_HDR_photo()` — each opened and closed its own session, which defeated the point of a persistent session. The `Camera` context manager is now the only API.
+
+### Changed
+- **Single persistent-session API (`lib/picam2_utils.py`):** `Camera` now exposes `configure(still_dims, preview_dims=None)` (public), `estimate_parameters(config)`, `take_photo(path, exposure_time, gain, awbgains)`, and `take_hdr(path, AEB, AEB_stops, exposure_time, gain, awbgains)`. Capture methods assume the camera is already configured; `take_hdr()` locks 3A once and flushes the startup auto-mode frame once per bracket.
+- **`PiLiDAR.py`:** Camera section restructured to one `with Camera() as cam:` block — calibrate at preview resolution, reconfigure to full-resolution stills, then bracket at each angle. No backend selection or fallback.
+
 ## [2.2.0] - 2026-10-11
 
 ### Added
@@ -30,9 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Refine by default (`PiLiDAR.py`, `config.json`):** The stitching step now calls `hugin_refine()` when `PANO.REFINE` is `true` (default), falling back to the fast template-only `hugin_stitch()` when `false`.
 - **Experiment Relocation:** Moved ad-hoc experiment scripts into a dedicated `experiments/` directory.
 - **Roadmap Consolidation (`ROADMAP.md`):** Folded the camera 3A/HDR and Hugin template analysis into the Phase 1 (Camera Subsystem Modernization) and Phase 2 (Panorama Geometry Refinement) sections, including the concrete Picamera2 migration notes and the remaining template-ordering / shared-distortion work.
-
-### Removed
-- **`MOST-OBVIOUS-ISSUES.md`:** Content consolidated into `ROADMAP.md`; file removed.
 
 ## [2.0.0] - 2026-10-10
 

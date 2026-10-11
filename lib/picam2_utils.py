@@ -1,38 +1,35 @@
 """
 Picamera2-based camera capture for the PiLiDAR panorama rig.
 
-Drop-in replacement for ``lib/rpicam_utils.py`` (which shells out to
-``rpicam-still``). Instead of spawning a new camera process per frame, this
-module drives the sensor through a single persistent Picamera2 session:
+Drives the IMX477 through a single persistent Picamera2 session:
 
-    1. configure still + preview streams and start the camera
+    1. configure the still stream and start the camera
     2. let the 3A (AE/AWB) pipeline settle over a few frames
-    3. read the converged ``ExposureTime`` / ``AnalogueGain`` / ``ColourGains``
-       from ``capture_metadata()``
-    4. lock 3A (``AeEnable=False``, ``AwbEnable=False``) and drive the sensor
-       manually for the HDR bracket
+    3. read the converged ExposureTime / AnalogueGain / ColourGains from
+       capture_metadata()
+    4. lock 3A (AeEnable=False, AwbEnable=False) and drive the sensor manually
+       for the HDR bracket
 
-HDR bracketing keeps the same shutter-for-dark / gain-for-bright strategy as
-the rpicam path: negative EV steps lengthen the exposure (shutter), positive EV
-steps raise the gain. This avoids motion blur on the bright frames while still
-recovering shadow detail on the dark frames.
+HDR bracketing uses shutter-for-dark / gain-for-bright: negative EV steps
+lengthen the exposure, positive EV steps raise the gain. This avoids motion
+blur on the bright frames while still recovering shadow detail on the dark
+frames. The IMX477 via libcamera exposes only AnalogueGain (no DigitalGain
+control), so bracket gain is clamped to MAX_ANALOGUE_GAIN.
 
 Units
 -----
-Picamera2 reports ``ExposureTime`` in **nanoseconds** and ``AnalogueGain`` /
-``DigitalGain`` as linear multipliers. The rest of the project works in
-**seconds** for exposure and total gain (ISO/100), so conversions happen at the
-boundary in this module.
+Picamera2 reports ExposureTime in nanoseconds and AnalogueGain as a linear
+multiplier. The rest of the project works in seconds for exposure, so the
+conversion happens at the boundary in this module.
 
-Only importable/runnable on the target Raspberry Pi (needs the camera stack);
-on a desktop the import of ``picamera2`` will fail and the caller should fall
-back to ``lib/rpicam_utils.py``.
+Only runnable on the target Raspberry Pi (needs the libcamera camera stack).
 """
 import os
 import time
 
-# IMX477 (Raspberry Pi HQ Camera) max analogue gain. Bracket steps that would
-# exceed this are clamped here (DigitalGain is kept at 1 per the roadmap).
+# IMX477 (Raspberry Pi HQ Camera) max analogue gain. libcamera exposes only
+# AnalogueGain (no DigitalGain control), so bracket steps that would exceed this
+# are clamped here.
 MAX_ANALOGUE_GAIN = 16.0
 
 
@@ -48,13 +45,12 @@ class Camera:
 
         with Camera() as cam:
             exposure_time, gain, awbgains = cam.estimate_parameters(config)
+            cam.configure(config.get("CAM", "dims"))   # full-resolution stills
             for angle in angles:
-                cam.take_hdr(path, exposure_time, gain, awbgains, AEB, AEB_stops)
+                cam.take_hdr(path, AEB, AEB_stops, exposure_time, gain, awbgains)
     """
 
     def __init__(self):
-        # Imported lazily so the module can be imported (and syntax-checked) on
-        # a desktop without the camera stack; only instantiation needs picamera2.
         from picamera2 import Picamera2
         self._Picamera2 = Picamera2
 
@@ -71,12 +67,23 @@ class Camera:
         return False
 
     # -- configuration -------------------------------------------------------
-    def _configure(self, still_dims, preview_dims=None):
-        """Configure still + (optional) preview streams and start the camera."""
-        configs = {"main": {"size": tuple(still_dims), "format": "bgr8"}}
-        if preview_dims:
-            configs["lores"] = {"size": tuple(preview_dims), "format": "bgr8"}
-        self.camera.configure(configs)
+    def configure(self, still_dims, preview_dims=None):
+        """Configure still + (optional) preview streams and start the camera.
+
+        Uses ``create_still_configuration()`` so the full config structure
+        (``raw``/``sensor``/``controls``/stream alignment) is built correctly;
+        passing a bare dict to ``configure()`` raises ``KeyError: 'raw'``.
+        Re-configuring requires the camera to be stopped first.
+        """
+        try:
+            self.camera.stop()
+        except Exception:
+            pass
+        config = self.camera.create_still_configuration(
+            main={"size": tuple(still_dims)},
+            lores={"size": tuple(preview_dims)} if preview_dims else None,
+        )
+        self.camera.configure(config)
         self.camera.start()
 
     def _settle(self, frames=10, interval=0.1):
@@ -89,33 +96,40 @@ class Camera:
         """Freeze AE and AWB so subsequent frames are fully manual."""
         self.camera.set_controls({"AeEnable": False, "AwbEnable": False})
 
+    def _flush(self):
+        """Discard one frame so the next capture is not a still-in-flight
+        auto-mode frame. After ``configure()`` (which restarts the camera in
+        auto mode) + ``_lock_3a()``, the first queued frame can still carry the
+        pre-lock 3A state; capturing and dropping it guarantees the following
+        frame reflects the manual controls we set."""
+        self.camera.capture_array()
+
     def _set_manual(self, exposure_time, gain, awbgains):
         """Apply manual exposure / gain / white-balance to the sensor.
 
         ``exposure_time`` is in seconds, ``gain`` is the total linear gain, and
-        ``awbgains`` is ``[R, B]``. The total gain is split into analogue (capped
-        at ``MAX_ANALOGUE_GAIN``) and digital components.
+        ``awbgains`` is ``[R, B]``. The IMX477 via libcamera only advertises
+        ``AnalogueGain`` (no ``DigitalGain`` control), so the gain is clamped to
+        ``MAX_ANALOGUE_GAIN``; bracket steps that would exceed it are capped.
         """
         analogue_gain = min(gain, MAX_ANALOGUE_GAIN)
-        digital_gain = 1.0 if gain <= MAX_ANALOGUE_GAIN else gain / MAX_ANALOGUE_GAIN
         self.camera.set_controls({
             "ExposureTime": _ns(exposure_time),
             "AnalogueGain": analogue_gain,
-            "DigitalGain": digital_gain,
             "ColourGains": [awbgains[0], awbgains[1]],
         })
 
     # -- calibration ---------------------------------------------------------
     def estimate_parameters(self, config):
-        """Converge 3A, read the result, and lock it.
+        """Converge 3A at preview resolution, read the result, and lock it.
 
-        Returns ``(exposure_time, gain, awbgains)`` in the same units as
-        ``rpicam_utils.estimate_camera_parameters`` (seconds, total gain, [R, B]).
+        Returns ``(exposure_time, gain, awbgains)`` in seconds / total linear
+        gain / ``[R, B]``.
         """
         preview_dims = config.get("CAM", "preview_dims")
         set_gain = config.get("CAM", "set_gain")
 
-        self._configure(still_dims=preview_dims)
+        self.configure(still_dims=preview_dims)
         self._settle()
 
         meta = self.camera.capture_metadata()
@@ -134,31 +148,30 @@ class Camera:
         return exposure_time, gain, awbgains
 
     # -- capture -------------------------------------------------------------
-    def take_photo(self, path, dims, exposure_time=None, gain=None,
-                   awbgains=None, blocking=True):
-        """Capture a single still at the given manual parameters."""
-        self._configure(still_dims=dims)
-        if exposure_time is not None and gain is not None:
-            self._lock_3a()
-            self._set_manual(exposure_time, gain, awbgains or [1.0, 1.0])
+    def take_photo(self, path, exposure_time, gain, awbgains):
+        """Capture a single still at the given manual parameters.
+
+        Assumes the camera is already configured (see ``configure()``).
+        """
+        self._lock_3a()
+        self._set_manual(exposure_time, gain, awbgains)
+        self._flush()  # drop the startup auto-mode frame
         self.camera.capture_file(path)
         return path
 
-    def take_hdr(self, path, AEB=1, AEB_stops=2, dims=(4056, 3040),
-                 exposure_time=None, gain=None, awbgains=None, blocking=True):
+    def take_hdr(self, path, AEB, AEB_stops, exposure_time, gain, awbgains):
         """Capture an HDR bracket using shutter-for-dark / gain-for-bright.
 
-        Mirrors ``rpicam_utils.take_HDR_photo``: negative EV steps lengthen the
-        exposure, positive EV steps raise the gain. Filenames carry the EV offset
-        (``..._<ev>.jpg``) so the Hugin reorder step can match them to the
-        template's per-angle EV order.
+        Negative EV steps lengthen the exposure, positive EV steps raise the
+        gain. Filenames carry the EV offset (``..._<ev>.jpg``) so the Hugin
+        reorder step can match them to the template's per-angle EV order.
+        Assumes the camera is already configured at the still resolution.
         """
         path_split = os.path.splitext(path)
         AEB = int(AEB)
         stop_multiplier = 2 ** AEB_stops
         paths = []
 
-        self._configure(still_dims=dims)
         self._lock_3a()
 
         for step in range(-AEB, AEB + 1):
@@ -169,35 +182,11 @@ class Camera:
                 hdr_exposure_time = exposure_time
                 hdr_gain = gain * (stop_multiplier ** step)
 
-            self._set_manual(hdr_exposure_time, hdr_gain, awbgains or [1.0, 1.0])
+            self._set_manual(hdr_exposure_time, hdr_gain, awbgains)
+            if step == -AEB:
+                self._flush()  # drop the startup auto-mode frame once
             hdr_path = f"{path_split[0]}_{step * AEB_stops}{path_split[1]}"
             self.camera.capture_file(hdr_path)
             paths.append(hdr_path)
 
         return paths
-
-
-# ---------------------------------------------------------------------------
-# Module-level drop-in wrappers (match the rpicam_utils interface so PiLiDAR.py
-# can fall back between the two backends without changing its call sites).
-# Each call opens and closes its own session; for maximum throughput use the
-# ``Camera`` context manager directly and keep one session across all angles.
-# ---------------------------------------------------------------------------
-def estimate_camera_parameters(config):
-    with Camera() as cam:
-        return cam.estimate_parameters(config)
-
-
-def take_photo(path, dims=(4056, 3040), exposure_time=None, gain=None,
-               awbgains=None, blocking=True, **_ignored):
-    with Camera() as cam:
-        return cam.take_photo(path, dims, exposure_time, gain, awbgains, blocking)
-
-
-def take_HDR_photo(path, AEB=1, AEB_stops=2, dims=(4056, 3040),
-                   exposure_time=None, gain=None, awbgains=None,
-                   denoise="cdn_hq", awb="auto", sharpness=0.5, saturation=0.7,
-                   save_raw=False, blocking=True):
-    with Camera() as cam:
-        return cam.take_hdr(path, AEB, AEB_stops, dims, exposure_time, gain,
-                            awbgains, blocking)

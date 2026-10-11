@@ -13,7 +13,7 @@ cd /home/pi/PiLiDAR
 
 enable password-less login:
 ```bash
-ssh-copy-id -i ~/.ssh/id_ed25519.pub flip@192.168.1.75
+ssh-copy-id -i ~/.ssh/id_ed25519.pub flip@192.168.1.16
 ```
 
 
@@ -88,13 +88,12 @@ The test suite passes in CI on desktop machines without physical hardware or Ras
   - Migrate from deprecated `RPi.GPIO` to modern `gpiozero` / `lgpio` (compatible with Pi 4, Pi 5, and kernel 6.x+).
   - Investigate hardware timer / PWM stepping to eliminate userspace `time.sleep` jitter during sweeps.
   - Evaluate endstop or home-position switch support to prevent cumulative stepper angle drift.
-- **Camera Subsystem Modernization (3A + HDR)** — ✅ done (v2.2.0, `lib/picam2_utils.py`)
-  - ~~Migrate from repeated `rpicam-still` subprocess invocations to native `Picamera2` Python bindings.~~ → `lib/picam2_utils.py` drives a single persistent Picamera2 session; `PiLiDAR.py` auto-selects it and falls back to `rpicam-still` when `picamera2` is unavailable.
+- **Camera Subsystem Modernization (3A + HDR)** — ✅ done (v2.2.0 backend, v2.3.0 cleanup, `lib/picam2_utils.py`)
+  - ~~Migrate from repeated `rpicam-still` subprocess invocations to native `Picamera2` Python bindings.~~ → `lib/picam2_utils.py` drives a single persistent Picamera2 session; the `rpicam-still` fallback was removed in v2.3.0 (Pi-only project).
   - ~~Maintain a persistent sensor session so AE/AWB state is not re-discovered per frame.~~ → `Camera` context manager keeps one session across all angles.
   - ~~Replace the iterative AWB loop.~~ → `estimate_parameters()` lets 3A settle over a few frames, reads `ExposureTime` / `AnalogueGain` / `DigitalGain` / `ColourGains` from `capture_metadata()`, then locks 3A (`AeEnable=False`, `AwbEnable=False`). No EXIF parsing, no iteration.
-  - ~~Preserve the shutter-for-dark / gain-for-bright HDR bracket.~~ → `take_hdr()` keeps negative-EV-via-shutter / positive-EV-via-gain; total gain split into analogue (capped at `MAX_ANALOGUE_GAIN = 16`) + digital, `DigitalGain` stays 1 below the cap.
+  - ~~Preserve the shutter-for-dark / gain-for-bright HDR bracket.~~ → `take_hdr()` keeps negative-EV-via-shutter / positive-EV-via-gain; gain clamped to `MAX_ANALOGUE_GAIN = 16` (the IMX477 via libcamera exposes no `DigitalGain` control).
   - ~~Watch the units.~~ → ns↔s and linear-gain conversions handled at the module boundary.
-  - **Remaining:** drop the `exifread` dependency once the Pi is confirmed running the Picamera2 path (kept for the rpicam fallback).
 - **Pre-Flight Hardware Diagnostics**
   - Implement an automated diagnostic routine (`pilidar doctor`) checking UART communication, I2C IMU connectivity, camera availability, and storage space before beginning a scan.
 
