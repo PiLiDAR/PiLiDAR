@@ -3,6 +3,14 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.14] - 2026-10-11
+
+### Fixed
+- **MPU6050 DMP init retries widened 5 → 10.** The flaky I2C `EIO`/`EREMOTEIO` DMP upload can need more than 5 attempts (observed ~3–6, occasionally more); 5 still let scans capture without quaternions (`261011-2345`). 10 retries captured quaternions on `261011-2354`.
+
+### Notes
+- **Cross-scan mounting consistency is ~2°.** `IMU.MOUNTING` solved on the tilted `261011-2329` (18.4°) levels it to 0.10°, but on the level `261011-2354` (2.2°) the residual is ~1.6° — the body-frame turntable axis (`fit_turntable_axis.c_body_accel`) differs ~2° between the two scans (spread ~14°), so the calibrated mounting does not fully generalise. Improving the axis estimate (or a joint multi-scan solve) is the next accuracy step.
+
 ## [2.5.13] - 2026-10-11
 
 ### Fixed
