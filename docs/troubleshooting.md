@@ -7,18 +7,20 @@ get [CP210x_Universal_Windows_Driver.zip](https://files.waveshare.com/upload/6/6
 https://www.waveshare.com/wiki/DTOF_LIDAR_STL27L#Software_Download
 
 ### RPi.GPIO RuntimeError: Failed to add edge detection
-current bookworm version has deprecated sysfs GPIO interface removed.
-use [LGPIO](https://pypi.org/project/rpi-lgpio/) as described [here](https://raspberrypi.stackexchange.com/questions/147332/rpi-gpio-runtimeerror-failed-to-add-edge-detection):
+The Bookworm kernel removed the deprecated sysfs GPIO interface that `RPi.GPIO`
+needs. PiLiDAR no longer uses `RPi.GPIO` at all — `gpio_interrupt.py`,
+`lib/a4988_driver.py` and the relay setup in `lib/config.py` are all built on
+the [lgpio](https://pypi.org/project/lgpio/) C-API (installed in the venv via
+`requirements.txt`), which talks to the modern `gpiochip` character devices:
 
-    sudo apt remove python3-rpi.gpio
-    sudo apt update
+    pip install lgpio
 
-    sudo apt install python3-rpi-lgpio
+If a legacy script still fails with `ModuleNotFoundError: No module named 'RPi'`,
+it is importing `RPi.GPIO` — port it to lgpio (see `lib/a4988_driver.py` for the
+output-pin pattern: `gpiochip_open` → `gpio_claim_output` → `gpio_write`) or run
+it through the `rpi-lgpio` compatibility shim.
 
-    # or in an env without system packages:
-    pip3 install rpi-lgpio
-
-LGPIO creates temp-files ([issue](https://github.com/joan2937/lg/issues/12)) like ".lgd-nfy0". gpio-interrupt.py executes 'export LG_WD=/tmp' to set it's CWD.
+lgpio creates temp-files ([issue](https://github.com/joan2937/lg/issues/12)) like ".lgd-nfy0". gpio-interrupt.py executes 'export LG_WD=/tmp' to set it's CWD.
 
 
 ### poor performance of VS Code on Raspberry Pi

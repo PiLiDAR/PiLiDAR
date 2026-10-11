@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - 2026-10-11
+
+### Fixed
+- **`lib/a4988_driver.py` migrated from `RPi.GPIO` to the `lgpio` C-API:** v2.5.0 removed the system `python3-rpi.gpio` package but the stepper driver still imported it, so `PiLiDAR.py` failed at startup on the Pi (`ModuleNotFoundError: No module named 'RPi'`). The driver now claims its pins from gpiochip 0 (`gpiochip_open` → `gpio_claim_output` → `gpio_write`, `gpio_free` on `close()`) — same pattern as `gpio_interrupt.py`, same public API and motion semantics. Validated on hardware: 20° CW/CCW round-trip returns to exactly 0 steps; full `PiLiDAR.py` startup including scan-phase motion works.
+- **Relay GPIO setup in `lib/config.py` moved to lgpio** as well: `gpio_setup()` claims `STEPPER.RELAY_PIN` as an output (with a cached chip handle so `Config()` re-inits don't collide). Previously it silently failed with a warning since the `RPi.GPIO` import was gone.
+
+### Changed
+- **`docs/troubleshooting.md`:** the RPi.GPIO section no longer recommends installing the `rpi-lgpio` shim — PiLiDAR is now fully on the lgpio C-API; the shim is only mentioned as a fallback for legacy third-party scripts.
+
 ## [2.5.0] - 2026-10-11
 
 ### Added

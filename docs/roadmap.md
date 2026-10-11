@@ -79,8 +79,8 @@ The test suite passes in CI on desktop machines without physical hardware or Ras
   - Implement a dedicated background reader thread with a bounded thread-safe queue to decouple serial I/O from processing.
   - Add automated sync-byte recovery, timeout handling, and malformed packet error logging.
   - Benchmark and validate sustained throughput across all supported models: LD06, LD19, and STL27L.
-- **Modern GPIO & Motion Control**
-  - Migrate from deprecated `RPi.GPIO` to modern `gpiozero` / `lgpio` (compatible with Pi 4, Pi 5, and kernel 6.x+).
+- **Modern GPIO & Motion Control** — ✅ done (v2.5.1)
+  - ~~Migrate from deprecated `RPi.GPIO` to modern `gpiozero` / `lgpio` (compatible with Pi 4, Pi 5, and kernel 6.x+).~~ → completed via the lgpio C-API (`gpiochip_open`/`gpio_claim_output`/`gpio_write`): `gpio_interrupt.py` (v2.5.0), `lib/a4988_driver.py` + the relay setup in `lib/config.py` (v2.5.1). No `RPi.GPIO` imports remain.
   - Investigate hardware timer / PWM stepping to eliminate userspace `time.sleep` jitter during sweeps.
   - Evaluate endstop or home-position switch support to prevent cumulative stepper angle drift.
 - **Camera Subsystem Modernization (3A + HDR)** — ✅ done (v2.2.0 backend, v2.3.0 cleanup, `lib/picam2_utils.py`)
