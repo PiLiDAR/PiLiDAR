@@ -181,6 +181,24 @@ def leveling_rotation(up_vector):
     return R.align_vectors([_WORLD_UP], [up])[0]
 
 
+# IMU -> scanner/cloud mounting. The MPU6050 is mounted with X = left, Y = up,
+# Z = forward (scanner view), and the LiDAR's scan-plane normal ("local up") is
+# -Z_IMU, so the scan plane is the X_IMU-Y_IMU plane. The cloud frame has Z = up
+# (merge_2D_points revolves about (0,0,1)) -> this maps the IMU up (+Y) onto the
+# cloud up (+Z), and is a proper rotation (det = +1).
+_IMU_TO_CLOUD = np.array([[1.0, 0.0, 0.0],
+                          [0.0, 0.0, -1.0],
+                          [0.0, 1.0, 0.0]])
+
+
+def cloud_up_vector(quaternions, scale=16384.0):
+    """Gravity direction (scanner up) expressed in the cloud/scanner frame.
+
+    Feeds :func:`leveling_rotation` to level the assembled cloud.
+    """
+    return _IMU_TO_CLOUD @ imu_up_vector(quaternions, scale=scale)
+
+
 if __name__ == '__main__':
 
     visualize = True

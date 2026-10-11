@@ -10,10 +10,10 @@ from scipy.spatial.transform import Rotation as R
 import pickle
 
 try:
-    from lib.imu_orientation import Orientation
+    from lib.imu_orientation import Orientation, cloud_up_vector, leveling_rotation
 except Exception:
     try:
-        from imu_orientation import Orientation
+        from imu_orientation import Orientation, cloud_up_vector, leveling_rotation
     except Exception:
         Orientation = None
 
@@ -55,7 +55,7 @@ def process_raw(config, save=True):
             cartesian_list.append(points2d)
         return cartesian_list
 
-    def postprocess_3D(config, pcd, save=True):
+    def postprocess_3D(config, pcd, save=True, imu_up=None):
         # move Z offset and scale pointcloud
         pcd = transform(pcd, translate=(0, 0, config.get("3D","Z_OFFSET")))                 # Z offset in mm
         scene_scale = config.get("3D","SCALE")                                              # mm -> 0.001 m
@@ -74,6 +74,12 @@ def process_raw(config, save=True):
 
         else:  # colorize pointcloud by mapping intensities to colormap
             pcd = colormap_pcd(pcd, gamma=1, cmap="viridis")
+
+        # LEVEL THE CLOUD (one rotation at the end, after coloring: the panorama is
+        # referenced to the device frame, so level only once the colours are set)
+        if imu_up is not None:
+            pcd = transform(pcd, transformation=leveling_rotation(imu_up).as_matrix())
+            print("\nleveled point cloud to gravity.")
 
         if save:
             save_pointcloud_threaded(pcd, config.pcd_path, ply_ascii=config.get("3D","ASCII"))
@@ -94,19 +100,17 @@ def process_raw(config, save=True):
         return pcd
 
     # load raw data dict from pickle file
+    imu_up = None
     if os.path.exists(config.raw_path):
         # print("lidar.pkl file found:", config.raw_path)
         raw_scan = load_raw_scan(config.raw_path)
 
 
-        # IMU data
-        if "quaternions" in raw_scan:
-            orientation = Orientation(raw_scan["quaternions"], degrees=True)
-            # for i, euler_angles in enumerate(orientation.euler_list):
-            #     print(f"Euler {i}: {euler_angles.x:.3} {euler_angles.y:.3} {euler_angles.z:.3}")
-            print(f"\nIMU data loaded: {len(orientation.euler_list)} samples.")
-            # TODO: use data to level the pointcloud
-
+        # IMU data -> up vector in the cloud frame (for leveling at the end)
+        if "quaternions" in raw_scan and config.get("IMU", "LEVEL"):
+            imu_up = cloud_up_vector(raw_scan["quaternions"])
+            print(f"\nIMU: {len(raw_scan['quaternions'])} samples; "
+                  f"up in cloud frame = {np.round(imu_up, 3).tolist()}")
 
         array_3D = merge_2D_points(raw_scan,
                         position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm
@@ -140,7 +144,7 @@ def process_raw(config, save=True):
     pcd = pcd_from_np(array_3D, estimate_normals=True, max_nn=50, radius=normal_radius)
     print("\n2D->3D merge completed.")
 
-    pcd = postprocess_3D(config, pcd, save=save)
+    pcd = postprocess_3D(config, pcd, save=save, imu_up=imu_up)
     print("\nprocessing 3D completed.")
     return pcd
 
@@ -618,7 +622,7 @@ if __name__ == "__main__":
     from config import Config
     from visualization import visualize
 
-    scan_id = "240824-1230"
+    scan_id = "261011-1731"
 
     config = Config()
     config.init(scan_id=scan_id)

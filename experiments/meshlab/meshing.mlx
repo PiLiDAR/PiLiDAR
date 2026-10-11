@@ -1,0 +1,83 @@
+<!DOCTYPE FilterScript>
+<FilterScript>
+
+ <filter name="Vertex Color Filling">
+  <Param type="RichColor" r="255" g="255" name="color1" b="255" a="255"/>
+  <Param type="RichBool" value="false" name="onSelected"/>
+ </filter>
+
+ <filter name="Point Cloud Simplification">
+  <Param type="RichInt" value="10000000" name="SampleNum"/>
+  <Param type="RichAbsPerc" value="0" max="41.3071" name="Radius" min="0"/>
+  <Param type="RichBool" value="true" name="BestSampleFlag"/>
+  <Param type="RichInt" value="10" name="BestSamplePool"/>
+  <Param type="RichBool" value="false" name="ExactNumFlag"/>
+ </filter>
+
+ <filter name="Smooths normals on a point sets">
+  <Param type="RichInt" value="10" name="K"/>
+  <Param type="RichBool" value="true" name="useDist"/>
+ </filter>
+
+ <filter name="Surface Reconstruction: Screened Poisson">
+  <Param type="RichBool" value="false" name="visibleLayer"/>
+  <Param type="RichInt" value="15" name="depth"/>
+  <Param type="RichInt" value="5" name="fullDepth"/>
+  <Param type="RichInt" value="0" name="cgDepth"/>
+  <Param type="RichFloat" value="1.1" name="scale"/>
+  <Param type="RichFloat" value="1.5" name="samplesPerNode"/>
+  <Param type="RichFloat" value="4" name="pointWeight"/>
+  <Param type="RichInt" value="8" name="iters"/>
+  <Param type="RichBool" value="false" name="confidence"/>
+  <Param type="RichBool" value="false" name="preClean"/>
+ </filter>
+
+ <filter name="Hausdorff Distance">
+  <Param type="RichMesh" value="2" name="SampledMesh"/>
+  <Param type="RichMesh" value="0" name="TargetMesh"/>
+  <Param type="RichBool" value="false" name="SaveSample"/>
+  <Param type="RichBool" value="true" name="SampleVert"/>
+  <Param type="RichBool" value="false" name="SampleEdge"/>
+  <Param type="RichBool" value="false" name="SampleFauxEdge"/>
+  <Param type="RichBool" value="false" name="SampleFace"/>
+  <Param type="RichInt" value="2910522" name="SampleNum"/>
+  <Param type="RichAbsPerc" value="19.2012" max="41.5161" name="MaxDist" min="0"/>
+ </filter>
+
+ <filter name="Select by Vertex Quality">
+  <Param type="RichDynamicFloat" value="0" max="2.36276" name="minQ" min="3.11194e-05"/>
+  <Param type="RichDynamicFloat" value="0.05" max="2.36276" name="maxQ" min="3.11194e-05"/>
+  <Param type="RichBool" value="true" name="Inclusive"/>
+ </filter>
+
+ <filter name="Dilate Selection"/>
+
+ <filter name="Erode Selection"/>
+
+ <filter name="Invert Selection">
+  <Param type="RichBool" value="true" name="InvFaces"/>
+  <Param type="RichBool" value="true" name="InvVerts"/>
+ </filter>
+
+ <filter name="Delete Selected Vertices"/>
+
+ <filter name="Laplacian Smooth">
+  <Param name="stepSmoothNum" value="3" type="RichInt"/>
+  <Param name="Boundary" value="true" type="RichBool"/>
+  <Param name="cotangentWeight" value="true" type="RichBool"/>
+  <Param name="Selected" value="false" type="RichBool"/>
+ </filter>
+ 
+ <filter name="Transform: Rotate">
+  <Param type="RichEnum" value="0" enum_cardinality="4" enum_val1="Y axis" enum_val2="Z axis" name="rotAxis" enum_val0="X axis" enum_val3="custom axis"/>
+  <Param type="RichEnum" value="0" enum_cardinality="3" enum_val1="barycenter" enum_val2="custom point" name="rotCenter" enum_val0="origin"/>
+  <Param type="RichDynamicFloat" value="-90" max="360" name="angle" min="-360"/>
+  <Param type="RichPoint3f" y="0" name="customAxis" z="0" x="0"/>
+  <Param type="RichPoint3f" y="0" name="customCenter" z="0" x="0"/>
+  <Param type="RichBool" value="false" name="snapFlag"/>
+  <Param type="RichFloat" value="30" name="snapAngle"/>
+  <Param type="RichBool" value="true" name="Freeze"/>
+  <Param type="RichBool" value="false" name="allLayers"/>
+ </filter>
+
+</FilterScript>

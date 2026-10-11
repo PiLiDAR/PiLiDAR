@@ -1,0 +1,39 @@
+<!DOCTYPE FilterScript>
+<FilterScript>
+
+ <filter name="Transform: Translate, Center, set Origin">
+  <Param enum_val3="Set new Origin" value="0" enum_val0="XYZ translation" enum_val1="Center on Scene BBox" type="RichEnum" enum_val2="Center on Layer BBox" name="traslMethod" enum_cardinality="4"/>
+  <Param value="0" max="206.535" min="-206.535" type="RichDynamicFloat" name="axisX"/>
+  <Param value="0.05" max="206.535" min="-206.535" type="RichDynamicFloat" name="axisY"/>
+  <Param value="0" max="206.535" min="-206.535" type="RichDynamicFloat" name="axisZ"/>
+  <Param x="0" type="RichPoint3f" y="0" z="0" name="newOrigin"/>
+  <Param value="true" type="RichBool" name="Freeze"/>
+  <Param value="false" type="RichBool" name="allLayers"/>
+ </filter>
+
+ <filter name="Transform: Rotate">
+  <Param enum_val3="custom axis" value="1" enum_val0="X axis" enum_val1="Y axis" type="RichEnum" enum_val2="Z axis" name="rotAxis" enum_cardinality="4"/>
+  <Param value="0" enum_val0="origin" enum_val1="barycenter" type="RichEnum" enum_val2="custom point" name="rotCenter" enum_cardinality="3"/>
+  <Param value="3" max="360" min="-360" type="RichDynamicFloat" name="angle"/>
+  <Param x="0" type="RichPoint3f" y="0" z="0" name="customAxis"/>
+  <Param x="0" type="RichPoint3f" y="0" z="0" name="customCenter"/>
+  <Param value="false" type="RichBool" name="snapFlag"/>
+  <Param value="30" type="RichFloat" name="snapAngle"/>
+  <Param value="true" type="RichBool" name="Freeze"/>
+  <Param value="false" type="RichBool" name="allLayers"/>
+ </filter>
+
+ <filter name="Parameterization + texturing from registered rasters">
+  <Param type="RichInt" value="8192" name="textureSize"/>
+  <Param type="RichString" value="texture.jpg" name="textureName"/>
+  <Param type="RichBool" value="false" name="colorCorrection"/>
+  <Param type="RichInt" value="1" name="colorCorrectionFilterSize"/>
+  <Param type="RichBool" value="false" name="useDistanceWeight"/>
+  <Param type="RichBool" value="false" name="useImgBorderWeight"/>
+  <Param type="RichBool" value="false" name="useAlphaWeight"/>
+  <Param type="RichBool" value="false" name="cleanIsolatedTriangles"/>
+  <Param type="RichBool" value="false" name="stretchingAllowed"/>
+  <Param type="RichInt" value="2" name="textureGutter"/>
+ </filter>
+
+</FilterScript>

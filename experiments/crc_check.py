@@ -1,0 +1,9 @@
+from lib.lidar_driver import LD06
+
+
+lidar = LD06()
+
+# one Lidar data package: [0x54, 0x2c, ..] (47 bytes)
+byte_string = b'T,\x10\x0eS+\x04\x01\xec\x13\x01\xea\x1a\x01\xea\x1e\x01\xea&\x01\xe91\x01\xe8)\x01\xeb,\x01\xe9-\x01\xeb4\x01\xe88\x01\xe5N\x01\xd9\xe4.W\x0b\xd3'
+
+print("valid package:", lidar.check_CRC8(byte_string))

@@ -3,6 +3,16 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.10] - 2026-10-11
+
+### Added
+- **IMU gravity leveling (`lib/pointcloud.py`, `lib/imu_orientation.py`):** the assembled point cloud is now leveled to gravity using the scan's IMU quaternions. The scanner up is the measured gravity direction in the IMU frame, mapped into the cloud frame by the mounting (`_IMU_TO_CLOUD`: X=left, Y=up, Z=forward; the LiDAR's local up is −Z, so the scan plane is the IMU X–Y plane) via `cloud_up_vector()`, then `leveling_rotation()` produces the single rotation applied to the finished cloud.
+  - **Applied once, at the end** (in `postprocess_3D`, after vertex colouring and before saving) — assembling in device space and rotating the result is mathematically identical to rotating every plane, and the panorama colour lookup is referenced to the device frame, so colouring must happen before leveling. Gated by `IMU.LEVEL` (default true).
+- **`tests/test_imu_axis.py`:** `cloud_up_vector` test (IMU +Y → cloud +Z, proper rotation) — suite now 60 tests.
+
+### Verified
+- On real scan `261011-1953` (984 quaternions): measured up in the cloud frame `[-0.037, -0.033, +0.999]` (2.82° tilt) → after leveling `[0, 0, 1]`. IMU up = +Y confirmed, matching the stated mounting.
+
 ## [2.5.9] - 2026-10-11
 
 ### Fixed

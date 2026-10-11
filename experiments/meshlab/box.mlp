@@ -1,0 +1,30 @@
+<!DOCTYPE MeshLabDocument>
+<MeshLabProject>
+ <MeshGroup/>
+ <RasterGroup>
+  <MLRaster label="back">
+   <VCGCamera BinaryData="0" ViewportPx="2048 2048" TranslationVector="0 0 0 1" LensDistortion="0 0" CameraType="0" CenterPx="1024 1024" PixelSizeMm="0.0369161 0.0369161" FocalMm="37.79" RotationMatrix="-1 0 0 0 0 1 0 0 0 0 -1 0 0 0 0 1 "/>
+   <Plane semantic="1" fileName="input/back.jpg"/>
+  </MLRaster>
+  <MLRaster label="top">
+   <VCGCamera BinaryData="0" ViewportPx="2048 2048" TranslationVector="0 0 0 1" LensDistortion="0 0" CameraType="0" CenterPx="1024 1024" PixelSizeMm="0.0369161 0.0369161" FocalMm="37.79" RotationMatrix="1 0 0 0 0 0 1 0 0 -1 0 0 0 0 0 1 "/>
+   <Plane semantic="1" fileName="input/top.jpg"/>
+  </MLRaster>
+  <MLRaster label="front">
+   <VCGCamera BinaryData="0" ViewportPx="2048 2048" TranslationVector="0 0 0 1" LensDistortion="0 0" CameraType="0" CenterPx="1024 1024" PixelSizeMm="0.0369161 0.0369161" FocalMm="37.79" RotationMatrix="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 "/>
+   <Plane semantic="1" fileName="input/front.jpg"/>
+  </MLRaster>
+  <MLRaster label="right">
+   <VCGCamera BinaryData="0" ViewportPx="2048 2048" TranslationVector="0 0 0 1" LensDistortion="0 0" CameraType="0" CenterPx="1024 1024" PixelSizeMm="0.0369161 0.0369161" FocalMm="37.79" RotationMatrix="0 0 1 0 0 1 0 0 -1 0 0 0 0 0 0 1 "/>
+   <Plane semantic="1" fileName="input/right.jpg"/>
+  </MLRaster>
+  <MLRaster label="left">
+   <VCGCamera BinaryData="0" ViewportPx="2048 2048" TranslationVector="0 0 0 1" LensDistortion="0 0" CameraType="0" CenterPx="1024 1024" PixelSizeMm="0.0369161 0.0369161" FocalMm="37.79" RotationMatrix="0 0 -1 0 0 1 0 0 1 0 0 0 0 0 0 1 "/>
+   <Plane semantic="1" fileName="input/left.jpg"/>
+  </MLRaster>
+  <MLRaster label="bottom">
+   <VCGCamera BinaryData="0" ViewportPx="2048 2048" TranslationVector="0 0 0 1" LensDistortion="0 0" CameraType="0" CenterPx="1024 1024" PixelSizeMm="0.0369161 0.0369161" FocalMm="37.79" RotationMatrix="1 0 0 0 0 0 -1 0 0 1 0 0 0 0 0 1 "/>
+   <Plane semantic="1" fileName="input/bottom.jpg"/>
+  </MLRaster>
+ </RasterGroup>
+</MeshLabProject>
