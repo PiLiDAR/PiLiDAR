@@ -29,17 +29,34 @@ class MPU6050Wrapper:
     def _read_mpu6050(self):
         while self.running:
             try:
-                if self.mpu.isreadyFIFO(self.packet_size):
-                    self.FIFO_buffer = self.mpu.get_FIFO_bytes(self.packet_size)
-                    quat = self.mpu.DMP_get_quaternion_int16(self.FIFO_buffer)
+                # drain the FIFO completely on every wake-up: read ALL pending
+                # packets and keep the freshest quaternion. Reading one packet
+                # per cycle lets a backlog grow until the 1024-byte FIFO
+                # overflows (the library then resets it and prints 'overflow!').
+                # Note: isreadyFIFO() gates on a one-shot interrupt status bit,
+                # so we drain by FIFO byte count instead.
+                fifo_count = self.mpu.get_FIFO_count()
+                if fifo_count >= self.packet_size and fifo_count < 1024:
+                    got_packet = False
+                    while fifo_count >= self.packet_size:
+                        self.FIFO_buffer = self.mpu.get_FIFO_bytes(self.packet_size)
+                        quat = self.mpu.DMP_get_quaternion_int16(self.FIFO_buffer)
+                        fifo_count -= self.packet_size
 
-                    # Check if any value is NaN
-                    if not any(math.isnan(value) for value in [quat.w, quat.x, quat.y, quat.z]):
-                        with self._lock:
-                            self.quat = quat
+                        # Check if any value is NaN
+                        if not any(math.isnan(value) for value in [quat.w, quat.x, quat.y, quat.z]):
+                            with self._lock:
+                                self.quat = quat
+                            got_packet = True
+
+                    if got_packet:
                         time.sleep(0.02)
                     else:
-                        time.sleep(0.01)
+                        time.sleep(0.005)
+                elif fifo_count >= 1024:
+                    # overflowed (1024 bytes is the chip's FIFO size) -> reset
+                    self.mpu.reset_FIFO()
+                    time.sleep(0.01)
                 else:
                     time.sleep(0.005)
             except OSError:

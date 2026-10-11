@@ -3,6 +3,11 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2] - 2026-10-11
+
+### Fixed
+- **MPU6050 IMU FIFO overflow during scans (`lib/imu_driver.py`):** the reader thread consumed one DMP packet per 20 ms cycle while the DMP produces at a fixed 50 Hz, so a backlog grew until the chip's 1024-byte FIFO overflowed — visible as periodic `overflow!` prints (from the `mpu6050` library's raw `print`) at a fixed interval, especially during the LiDAR sweep when the serial reader starves the IMU thread of GIL time. Each overflow also reset the FIFO, dropping quaternion samples from `raw_scan["quaternions"]`. The thread now drains the FIFO completely on every wake-up (by FIFO byte count, keeping the freshest quaternion), turning unbounded backlog into ≤20 ms latency. Validated on hardware: 20 s run under 2-thread CPU/GIL pressure with zero overflows (previously dozens).
+
 ## [2.5.1] - 2026-10-11
 
 ### Fixed

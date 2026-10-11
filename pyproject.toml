@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pilidar"
-version = "2.5.1"
+version = "2.5.2"
 description = "Open-source, low-cost DIY 360° LiDAR scanner and panoramic 3D reconstruction system"
 readme = "README.md"
 license = { text = "MIT" }
