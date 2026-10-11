@@ -22,6 +22,9 @@ except:
     from file_utils import make_dir
     from platform_utils import get_platform, allow_serial
 
+# cached lgpio gpiochip handle for the power relay (survives Config() re-init)
+_GPIO_CHIP = None
+
 _SAFE_OPERATORS = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
@@ -198,14 +201,24 @@ class Config:
         return safe_eval_math(formula)
 
     def gpio_setup(self, debug=False):
+        global _GPIO_CHIP
         try:
-            import RPi.GPIO as GPIO  # type: ignore
-            GPIO.setmode(GPIO.BCM)
-            GPIO.setwarnings(debug)
+            import lgpio  # type: ignore
+
+            if _GPIO_CHIP is None:
+                _GPIO_CHIP = lgpio.gpiochip_open(0)
+            handle = _GPIO_CHIP
+            if handle < 0:
+                raise RuntimeError(f"could not open gpiochip 0 ({lgpio.error_text(handle)})")
 
             # power relay
             relay_pin = self.get("STEPPER", "RELAY_PIN")
-            GPIO.setup(relay_pin, GPIO.OUT)
+            err = lgpio.gpio_claim_output(handle, relay_pin, 0)
+            if err < 0:
+                # already claimed by us (e.g. Config() re-init) -> just set it low
+                err = lgpio.gpio_write(handle, relay_pin, 0)
+            if err < 0:
+                raise RuntimeError(f"could not claim/write GPIO {relay_pin} ({lgpio.error_text(err)})")
         except (ImportError, RuntimeError) as e:
             print(f"[WARNING] GPIO setup skipped: {e}")
 

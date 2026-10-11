@@ -4,30 +4,36 @@ http://www.allegromicro.com/~/media/Files/Datasheets/A4988-Datasheet.ashx
 
 microstepping:
 https://i.stack.imgur.com/vN7JL.png
+
+GPIO is driven through the lgpio C-API (``pip install lgpio``) instead of the
+deprecated RPi.GPIO: output pins are claimed from gpiochip 0 (its line numbers
+are the BCM pin numbers) and written with gpio_write() — same pattern as
+gpio_interrupt.py.
 '''
 
-import RPi.GPIO as GPIO     # type: ignore
+import lgpio
 from time import sleep
 
 class A4988:
     def __init__(self, dir_pin, step_pin, ms_pins,
                  delay=0.001, step_angle=1.8, microsteps=16,
                  gear_ratio=1.0, verbose=False):
+        # verbose kept for API compatibility (lgpio has no warnings toggle)
 
-        # Disable warnings
-        GPIO.setwarnings(verbose)
-
-        GPIO.setmode(GPIO.BCM)
+        # open gpiochip 0
+        self.handle = lgpio.gpiochip_open(0)
+        if self.handle < 0:
+            raise RuntimeError(f"could not open gpiochip 0 ({lgpio.error_text(self.handle)})")
 
         self.dir_pin = dir_pin
-        GPIO.setup(self.dir_pin, GPIO.OUT)
+        self._claim_output(self.dir_pin)
 
         self.step_pin = step_pin
-        GPIO.setup(self.step_pin, GPIO.OUT)
+        self._claim_output(self.step_pin)
 
         self.ms_pins = ms_pins
         for pin in self.ms_pins:
-            GPIO.setup(pin, GPIO.OUT)
+            self._claim_output(pin)
 
         self.current_steps = 0  # internal absolute angle
 
@@ -44,10 +50,15 @@ class A4988:
 
         if self.microsteps in self.step_modes:
             for pin, state in zip(self.ms_pins, self.step_modes[self.microsteps]):
-                GPIO.output(pin, state)
+                lgpio.gpio_write(self.handle, pin, int(state))
+
+    def _claim_output(self, pin):
+        err = lgpio.gpio_claim_output(self.handle, pin, 0)
+        if err < 0:
+            raise RuntimeError(f"could not claim GPIO {pin} as output ({lgpio.error_text(err)})")
 
     def set_direction(self, direction):
-        GPIO.output(self.dir_pin, direction)
+        lgpio.gpio_write(self.handle, self.dir_pin, int(direction))
 
     def get_steps_for_angle(self, angle):
         return int((angle / self.step_angle) * self.microsteps * self.gear_ratio)
@@ -56,9 +67,9 @@ class A4988:
         return (steps / (self.microsteps * self.gear_ratio)) * self.step_angle
 
     def step(self):
-        GPIO.output(self.step_pin, True)
+        lgpio.gpio_write(self.handle, self.step_pin, 1)
         sleep(0.0001)
-        GPIO.output(self.step_pin, False)
+        lgpio.gpio_write(self.handle, self.step_pin, 0)
         sleep(self.delay)
 
     def move_steps(self, steps):
@@ -102,10 +113,9 @@ class A4988:
         return current_angle
 
     def close(self):
-        #GPIO.setmode(GPIO.BCM)
-        GPIO.cleanup(self.ms_pins)
-        GPIO.cleanup(self.dir_pin)
-        GPIO.cleanup(self.step_pin)
+        for pin in [self.dir_pin, self.step_pin, *self.ms_pins]:
+            lgpio.gpio_free(self.handle, pin)
+        lgpio.gpiochip_close(self.handle)
 
 
 if __name__ == "__main__":
