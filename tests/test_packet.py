@@ -119,6 +119,22 @@ def test_plane_complete_not_until_crossing(lidar):
     assert lidar._plane_complete() is False
 
 
+def test_plane_complete_anchor_ignores_frame_full(lidar):
+    # in anchor mode the blind frame boundary must NOT cut the plane short
+    lidar.step_at_angle = 50.0
+    lidar.out_i = lidar.out_len              # frame "full" but no crossing yet
+    lidar._crossing = False
+    assert lidar._plane_complete() is False
+
+
+def test_plane_complete_anchor_safety_cap(lidar):
+    # a missed crossing must not overflow the arrays
+    lidar.step_at_angle = 50.0
+    lidar._crossing = False
+    lidar.out_i = lidar.plane_max
+    assert lidar._plane_complete() is True
+
+
 def test_finalize_plane_labels_captured_angle_and_clears_arm(lidar):
     lidar.z_angle = 10.0
     lidar.out_i = 3

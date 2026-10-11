@@ -38,13 +38,14 @@ def lidar():
     lidar.dtype = np.float32
     lidar.out_i = 0
     lidar.out_len = 10
+    lidar.plane_max = 30
     # step-phase anchor: None -> blind packet-frame boundaries (legacy behaviour)
     lidar.step_at_angle = None
     lidar._prev_angle = None
     lidar._crossing = False
-    lidar.speeds = np.empty(lidar.out_len, dtype=lidar.dtype)
-    lidar.timestamps = np.empty(lidar.out_len, dtype=lidar.dtype)
-    lidar.points_2d = np.empty((lidar.out_len * lidar.dlength, 3), dtype=lidar.dtype)
+    lidar.speeds = np.empty(lidar.plane_max, dtype=lidar.dtype)
+    lidar.timestamps = np.empty(lidar.plane_max, dtype=lidar.dtype)
+    lidar.points_2d = np.empty((lidar.plane_max * lidar.dlength, 3), dtype=lidar.dtype)
     lidar.angle_package = np.zeros(lidar.dlength)
     lidar.distance_package = np.zeros(lidar.dlength)
     lidar.luminance_package = np.zeros(lidar.dlength)

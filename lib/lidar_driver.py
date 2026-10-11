@@ -19,6 +19,10 @@ import serial
 
 logger = logging.getLogger(__name__)
 
+# extra packets allocated per plane so an anchor-bounded revolution (which can
+# run slightly over out_len) does not overflow the preallocated arrays
+_PLANE_MARGIN = 20
+
 # running from project root
 try:
     from lib.config import Config
@@ -90,9 +94,10 @@ class Lidar:
         self.luminance_package    = np.zeros(self.dlength)
         # preallocate intermediate outputs:
         self.out_i              = 0
-        self.speeds             = np.empty(self.out_len, dtype=self.dtype)
-        self.timestamps         = np.empty(self.out_len, dtype=self.dtype)
-        self.points_2d          = np.empty((self.out_len * self.dlength, 3), dtype=self.dtype)  # [[x, y, l],[..
+        self.plane_max          = self.out_len + _PLANE_MARGIN  # safety cap in anchor mode
+        self.speeds             = np.empty(self.plane_max, dtype=self.dtype)
+        self.timestamps         = np.empty(self.plane_max, dtype=self.dtype)
+        self.points_2d          = np.empty((self.plane_max * self.dlength, 3), dtype=self.dtype)  # [[x, y, l],[..
 
 
         # self.data_dir           = config.lidar_dir  # TODO remove -> npy files replaced by single pkl file
@@ -260,10 +265,13 @@ class Lidar:
         The latter steps while the beam is near the rotation axis, where a point's
         distance from the axis — and hence the motion smear — is smallest.
         """
-        if self.out_i == self.out_len:
-            return True
-        # fire on the frame that contains the anchor crossing
-        return bool(self.step_at_angle is not None and self._crossing and self.out_i > 0)
+        if self.step_at_angle is None:
+            # legacy: a plane is a fixed packet frame
+            return self.out_i == self.out_len
+        # anchor mode: the crossing is the ONLY boundary (frame_full would beat
+        # against the crossing and cut the planes short); plane_max is a safety
+        # cap so a missed crossing cannot overflow the arrays
+        return bool(self._crossing or self.out_i >= self.plane_max)
 
     def _finalize_plane(self):
         """Append the current plane, labelled with the angle it was *captured* at.
@@ -374,10 +382,13 @@ class Lidar:
         # CS = int.from_bytes(byte_array[46:47][::-1], 'big')                   # CRC Checksum, checked even before decoding
 
         # detect the beam crossing the step-phase anchor (once per revolution): the
-        # anchor lies inside the forward arc from the previous frame's angle.
+        # anchor must lie strictly inside the forward arc from the previous
+        # frame's angle (strict, so a frame that starts *on* the anchor does not
+        # re-trigger).
         if self.step_at_angle is not None and self._prev_angle is not None:
             arc = (FSA - self._prev_angle) % 360
-            if 0 < arc < 180 and (self.step_at_angle - self._prev_angle) % 360 < arc:
+            off = (self.step_at_angle - self._prev_angle) % 360
+            if 0 < off < arc < 180:
                 self._crossing = True
         self._prev_angle = FSA
 
