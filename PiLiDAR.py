@@ -43,10 +43,14 @@ enable_cam   = config.get("ENABLE_CAM")
 enable_lidar = config.get("ENABLE_LIDAR")
 enable_IMU   = config.get("ENABLE_IMU")
 
-# initialize IMU
+# initialize IMU (non-fatal: a wedged/absent IMU must not abort the scan)
+quat_list = []
 if enable_IMU:
-    imu = MPU6050Wrapper(config.get("IMU", "i2c_bus"), config.get("IMU", "device_address"), config.get("IMU", "frequency"))
-    quat_list = []
+    try:
+        imu = MPU6050Wrapper(config.get("IMU", "i2c_bus"), config.get("IMU", "device_address"), config.get("IMU", "frequency"))
+    except Exception as e:
+        print(f"[WARNING] IMU init failed, continuing without IMU: {e.__class__.__name__}: {e}")
+        enable_IMU = False
 
 
 # initialize stepper
