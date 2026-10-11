@@ -3,6 +3,11 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.12] - 2026-10-11
+
+### Fixed
+- **Flaky MPU6050 DMP initialisation silently disabled the IMU.** The DMP firmware upload intermittently fails with an I2C `EIO`/`EREMOTEIO` even though the chip answers at its address (`i2c` scan shows `0x68`); `MPU6050Wrapper` now retries the init up to 5×. Previously a single glitch made `PiLiDAR.py` drop the IMU for the whole scan, so the pickle had no `quaternions` and leveling could not run (seen on `261011-2213`, `261011-2301`, `261011-2320`).
+
 ## [2.5.11] - 2026-10-11
 
 ### Fixed
