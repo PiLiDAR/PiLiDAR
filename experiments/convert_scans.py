@@ -16,18 +16,13 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from lib.pointcloud import load_raw_scan, save_raw_scan  # noqa: E402
+from lib.pointcloud import convert_raw_scan  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def convert(pkl_path, force=False):
-    npz_path = os.path.splitext(pkl_path)[0] + ".npz"
-    if os.path.exists(npz_path) and not force:
-        return "skip"
-    raw = load_raw_scan(pkl_path)          # legacy pickle (no sibling .npz yet)
-    save_raw_scan(pkl_path, raw)           # writes .npz + .json
-    return "ok"
+    return "ok" if convert_raw_scan(pkl_path, force=force) else "skip"
 
 
 def main():

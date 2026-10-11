@@ -25,7 +25,7 @@ The project follows a disciplined engineering pipeline:
 - ✅ **Phase 0** — Foundation, CI/CD, mock harness.
 - ✅ **Phase 1** — Hardware abstraction, acquisition stack, diagnostics.
 - 🟡 **Phase 2** — Open data standards & calibration (panorama refined; open containers + extrinsics still open).
-- ⬜ **Phase 3** — Unified CLI & processing pipeline engine.
+- ⬜ **Phase 3** — Unified CLI & processing pipeline engine. *(CLI scaffold ✅ v2.6.1)*
 - ⬜ **Phase 4** — Field usability: local web UI & remote operation.
 - 🟡 **Phase 5** — Multi-scan registration & reconstruction (IMU gravity leveling ✅ done; registration/meshing/E57 open).
 - ⬜ **Phase 6** — Packaging, documentation & community release.
@@ -33,7 +33,7 @@ The project follows a disciplined engineering pipeline:
 ## Next up
 1. **Phase 2 — LiDAR↔camera 6-DOF extrinsics calibration** (known-target fixture).
 2. **Phase 2 — Panorama: shared lens distortion + metadata provenance** in the sidecar.
-3. **Phase 3 — Unified `pilidar` CLI** (`capture` / `process` / `export` / `calibrate`, incl. `pilidar convert`).
+3. **Phase 3 — finish the CLI:** `capture`/`calibrate`, preprocessing flags (SOR/ROR/voxel), batch mode; retire `process_3D.py`.
 
 ---
 
@@ -86,15 +86,16 @@ Scans open in third-party tools (CloudCompare, MeshLab, Blender) with no Python/
 ## Phase 3 — Unified CLI & Processing Pipeline Engine
 **Objective:** Replace scattered root scripts with a clean, modular CLI and a deterministic end-to-end processing pipeline.
 
-- **Unified CLI** (`pilidar`, e.g. `typer`/`argparse`):
-  - `pilidar capture` — acquisition with configurable flags.
-  - `pilidar process` — assemble clouds, project panorama vertex colors, apply filters.
-  - `pilidar export` — PLY / LAS / PCD / E57.
-  - `pilidar calibrate` — hardware calibration workflows.
-  - (also expose `pilidar doctor` from Phase 1.)
-- **Preprocessing & noise rejection:** statistical (SOR) and radius (ROR) outlier removal; intensity threshold filtering; voxel downsampling preserving color/intensity.
+- **Unified CLI** (`pilidar`, `lib/cli.py`) — *scaffold ✅ (v2.6.1)*:
+  - ✅ `pilidar doctor` — pre-flight diagnostics.
+  - ✅ `pilidar process <scan_id>` — assemble + colour + level (flags: `--no-save/--no-level/--no-colour`).
+  - ✅ `pilidar convert [scan_ids]` — legacy `.pkl` → open NPZ+JSON.
+  - ✅ `pilidar export <in> [out]` — PLY/PCD/… conversion.
+  - ⬜ `pilidar capture` — acquisition (needs the Pi hardware stack; still `PiLiDAR.py`).
+  - ⬜ `pilidar calibrate` — calibration workflows.
+- **Preprocessing & noise rejection:** statistical (SOR) and radius (ROR) outlier removal; intensity threshold filtering; voxel downsampling preserving color/intensity. *(exists in `lib/pointcloud.py`; expose as flags.)*
 - **Pipeline automation:** progress bars + structured logging; batch processing across raw scan directories.
-- Replace ad-hoc scripts (`filter_3D.py`, `process_3D.py`, `meshing_test.py`).
+- Retire ad-hoc scripts (`process_3D.py`); keep `filter_3D.py`/`meshing_test.py` until their CLI equivalents land.
 
 ### Success criteria
 `pilidar process <scan_dir>` turns a raw capture folder into a clean, vertex-colorized point cloud in a single command.

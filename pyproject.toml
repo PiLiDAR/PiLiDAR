@@ -23,6 +23,9 @@ dependencies = [
     "mpu6050>=0.0.3",
 ]
 
+[project.scripts]
+pilidar = "lib.cli:main"
+
 [project.optional-dependencies]
 pi-hardware = [
     "lgpio>=0.2.2",
@@ -36,6 +39,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["lib*"]
+
+[tool.setuptools]
+py-modules = ["pilidar"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

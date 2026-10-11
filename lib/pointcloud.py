@@ -11,10 +11,10 @@ from scipy.spatial.transform import Rotation as R
 import pickle
 
 try:
-    from lib.imu_orientation import (Orientation, cloud_up_vector, leveling_rotation, mounting_matrix, reference_gravity)
+    from lib.imu_orientation import (Orientation, leveling_rotation, mounting_matrix, reference_gravity)
 except Exception:
     try:
-        from imu_orientation import (Orientation, cloud_up_vector, leveling_rotation, mounting_matrix, reference_gravity)
+        from imu_orientation import (Orientation, leveling_rotation, mounting_matrix, reference_gravity)
     except Exception:
         Orientation = None
 
@@ -146,6 +146,20 @@ def load_raw_scan(path):
     with open(path, "rb") as f:
         raw_scan = pickle.load(f)
     return raw_scan
+
+
+def convert_raw_scan(pkl_path, force=False):
+    """Convert a legacy pickled raw scan to the open container (NPZ + JSON).
+
+    Returns ``True`` if converted, ``False`` if an ``.npz`` already exists (and
+    ``force`` is not set). The original ``.pkl`` is left in place.
+    """
+    npz_path = os.path.splitext(pkl_path)[0] + ".npz"
+    if os.path.exists(npz_path) and not force:
+        return False
+    raw = load_raw_scan(pkl_path)
+    save_raw_scan(pkl_path, raw)
+    return True
 
 def process_raw(config, save=True):
 

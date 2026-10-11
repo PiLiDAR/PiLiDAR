@@ -3,6 +3,18 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.1] - 2026-10-12
+
+### Added
+- **Unified `pilidar` CLI** (`lib/cli.py`, `pilidar.py`, console script) — the first piece of Phase 3. One entry point for the previously scattered scripts:
+  - `pilidar doctor` — pre-flight hardware diagnostics (wired to `lib.diagnostics`).
+  - `pilidar process <scan_id>` — assemble + colour + level a raw scan (with `--no-save` / `--no-level` / `--no-colour`).
+  - `pilidar convert [scan_ids]` — legacy `.pkl` → open NPZ+JSON container.
+  - `pilidar export <in> [out]` — point-cloud format conversion (PLY/PCD/…).
+  - `pilidar capture` / `pilidar register` — reserved, give clear "not yet wired" errors.
+- `lib.pointcloud.convert_raw_scan()` shared helper (used by both the CLI and the experiment).
+- Tests for the CLI (sub-parser wiring, version/help, convert round-trip). Suite now 76 tests.
+
 ## [2.6.0] - 2026-10-12
 
 ### Changed

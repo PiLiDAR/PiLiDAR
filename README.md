@@ -70,6 +70,19 @@ klick the images to open the pointclouds in Sketchfab.
 2. **Wire the hardware** and configure GPIO/I2C/UART: see [docs/hardware.md](docs/hardware.md#wiring) and [docs/setup.md](docs/setup.md)
 3. **Run a scan**: `~/venv/bin/python PiLiDAR.py` (or press the scan button)
 
+## CLI
+
+A unified `pilidar` CLI (`lib/cli.py`) wraps the common tasks (Phase 3 in progress):
+
+```bash
+pilidar doctor                      # pre-flight hardware diagnostics
+pilidar process <scan_id>           # assemble + colour + level a raw scan -> .ply
+pilidar convert [scan_id ...]       # convert legacy .pkl scans to the open NPZ+JSON container
+pilidar export cloud.ply cloud.pcd  # convert a point cloud between formats
+```
+
+Without installing (`pip install -e .`), run it as `python pilidar.py <command>`.
+
 ## Downloading a scan from the Pi
 
 Scans are written under `~/PiLiDAR/scans/<scan_id>/` on the Pi. Pull one (or all)
@@ -93,7 +106,7 @@ overall progress. The scan files are world-readable, so no `sudo` is needed.)
 | Setup: Python env, GPIO, UART, PWM, Hugin, MeshLab, USB power | [docs/setup.md](docs/setup.md) |
 | Bill of materials, wiring, LiDAR specs, 3D printing | [docs/hardware.md](docs/hardware.md) |
 | Serial protocol, visualization, USB scan dumping | [docs/protocol.md](docs/protocol.md) |
-| IMU gravity leveling (frames, method, open issues) | [docs/imu_leveling.md](docs/imu_leveling.md) |
+| IMU gravity leveling (frames, method, accuracy) | [docs/imu_leveling.md](docs/imu_leveling.md) |
 | Troubleshooting & references | [docs/troubleshooting.md](docs/troubleshooting.md) |
 | Project roadmap (phases 0–6) | [docs/roadmap.md](docs/roadmap.md) |
 | Change history | [CHANGELOG.md](CHANGELOG.md) |
