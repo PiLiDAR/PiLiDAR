@@ -208,11 +208,12 @@ def check_gpio(config):
 def run_doctor(config=None, lidar_seconds=3.0, skip=()):
     """Run all checks and return a list of :class:`Result`."""
     if config is None:
-        # Config.__init__ already sets scans_root / device / PORT; init() would
-        # create an empty scan directory, which diagnostics must not litter.
-        # Lidar.__init__ reads config.raw_path (normally set by init()); it is
-        # unused for the read-only packet check, so provide a placeholder.
+        # Config.__init__ already sets scans_root / device / PORT, so the
+        # diagnostics run without a scan dir. init() would create an empty one.
         config = Config()
+    # Lidar.__init__ reads config.raw_path (normally set by init()); it is unused
+    # for the read-only packet check, so provide a placeholder if absent.
+    if getattr(config, "raw_path", None) is None:
         config.raw_path = None
 
     platform = get_platform()

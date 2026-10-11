@@ -28,6 +28,19 @@ def test_run_doctor_returns_results_for_every_check():
     assert all(r.status in (OK, WARN, FAIL, SKIP) for r in results)
 
 
+def test_run_doctor_accepts_prebuilt_config_without_raw_path():
+    """A Config built for diagnostics has no raw_path; the LiDAR check must cope.
+
+    Regression: run_doctor previously only supplied raw_path when it built the
+    Config itself, so the CLI path (which passes one in) crashed the LiDAR check.
+    """
+    from lib.config import Config
+
+    config = Config()  # no init() -> no raw_path
+    results = run_doctor(config, lidar_seconds=0.1, skip=HARDWARE)
+    assert all(isinstance(r, Result) for r in results)
+
+
 def test_run_doctor_skip_argument():
     results = run_doctor(lidar_seconds=0.1, skip=HARDWARE)
     by_name = {r.name: r for r in results}
