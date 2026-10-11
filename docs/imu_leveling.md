@@ -1,8 +1,10 @@
-# IMU gravity leveling — problem statement & current state
+# IMU gravity leveling — how it works
 
-> **Status:** *experimental / not reliable yet.* `IMU.LEVEL` is on by default but
-> the leveling only removes ~60 % of the tilt (measured against the floor). This
-> document is a hand-off so the problem can be attacked independently.
+> **Status:** *working.* `IMU.LEVEL` (default on) levels the cloud to gravity
+> after vertex colouring. On a real scan tilted 18.4° the floor comes out **0.10°**
+> off horizontal; a level scan keeps its ~2° noise floor. The residual is
+> dominated by the cross-scan consistency of the mounting (~2°, see "Remaining
+> accuracy limit").
 
 ## Goal
 
@@ -55,148 +57,172 @@ accel/gyro-fused, no magnetometer, so yaw drifts but the Z reference is gravity)
 - `cartesian` — the 2D fan (X, I columns) for that plane,
 - `quaternions` — one MPU6050 DMP quaternion `(w,x,y,z)` int16 per plane.
 
-All saved in `scans/<id>/<id>_lidar.pkl`. (`quaternions` is only present when the
-IMU initialised — it failed silently in older scans.)
+All saved in `scans/<id>/<id>_lidar.pkl`. `quaternions` is present only when the
+IMU initialised; the flaky DMP upload (see below) can silently drop it, so check
+for it before expecting a leveled export.
 
 Crucially: the **stepper angle is trusted**; the **IMU yaw is not** (the DMP
-under-reports rotation — a commanded 5°/step reads back ~2.3°; see "Known IMU
-limitations").
+under-reports rotation — a commanded 5°/step reads back ~2.3°; see "Known facts
+& limitations").
 
-## What we currently compute
+Note: the first plane of a sweep is a partial **warm-up** frame and is dropped
+(see "Known facts"); that leaves **one more quaternion than z_angles**, with the
+extra leading sample at a stale pre-sweep attitude.
 
-### Up vector (mean gravity in the IMU body frame)
+## What we compute
 
-`imu_up_vector(quaternions)`:
+### Gravity at the reference attitude (the leveling "up")
+
+`reference_gravity(quaternions, z_angles)`:
 
 ```
 g_body[k] = R(q_k)^T @ [0,0,1]          # gravity in the IMU body frame
-up_body   = normalize(mean_k g_body)    # unit vector
+up_body   = normalize(mean of g_body over the samples with |z_angle - 0°| <= 2°)
 ```
 
-For a **level** rig, `g_body` is constant and equals the turntable axis in the
-IMU frame. For a **tilted** rig, gravity sweeps a cone about the turntable axis
-as the platform rotates, so this **mean is biased** (the sweep is only 180°, not
-a full circle). The true axis is better estimated by `fit_turntable_axis()`
-(the common axis of the incremental rotations, or the gravity-cone plane normal).
+The IMU revolves about the turntable axis, so on a **tilted** rig gravity traces
+a **cone** about that axis in the body frame. Over the 180° sweep only a
+**half**-cone is covered, so the whole-sweep *mean* — `imu_up_vector()`, the old
+method — lies **inside** the cone and **under-reports the tilt** (it removed only
+~60 %). Sampling gravity at a single attitude (stepper angle ≈ 0°, averaged over
+a ±2° window) is not cone-biased.
+
+`z_angles` is aligned first: if there is one more quaternion than plane (the
+dropped warm-up plane) the extra **leading** sample is discarded before indexing.
+
+`imu_up_vector()` is kept but is **deprecated for leveling** — it is the biased
+mean.
 
 ### Mounting rotation (IMU → cloud)
 
-`IMU.MOUNTING` in `config.json` is a **3×3 rotation** that maps a vector from the
-IMU frame into the cloud frame. Currently it is a *data-derived* matrix,
-calibrated once (2026-10-11) by solving, over two scans (one level, one tilted
-~11°), the correspondences:
+`IMU.MOUNTING` in `config.json` maps a vector from the IMU frame into the cloud
+frame. It is calibration data, solved (2026-10-11) from a **tilted** scan via
+`experiments/calibrate_mounting.py` (→ `solve_mounting()`), from two
+correspondences:
 
 ```
-turntable axis (in IMU body)  ->  [0,0,1]     (cloud up)
-gravity g_body (in IMU body)  ->  floor normal (measured from the cloud)
+turntable axis  (body, fit_turntable_axis().c_body_accel)  ->  [0,0,1]       (cloud up)
+reference gravity (body, reference_gravity)                ->  floor normal  (measured)
 ```
 
-using `scipy.spatial.transform.Rotation.align_vectors`. Current value:
+with `scipy.spatial.transform.Rotation.align_vectors`. Current value:
 
 ```
-[[-0.1042, -0.0445,  0.9936],
- [ 0.9945,  0.0000,  0.1043],
- [-0.0046,  0.9990,  0.0443]]
+[[-0.9964, -0.0025, -0.0845],
+ [-0.0842, -0.0617,  0.9945],
+ [-0.0078,  0.9981,  0.0613]]
 ```
 
-(The idealised, hand-guessed permutation `X→Y, Y→Z, Z→X` was ~90° wrong in
-azimuth and did **not** work — that is why it is now solved from data.)
+Two things matter here:
 
-### Up vector in the cloud frame
+- The axis is mapped to **+Z**, but aligning gravity to +Z is what makes the
+  floor horizontal. The cloud up-axis is already +Z *by construction* (the fans
+  are revolved about `(0,0,1)`), so leveling by the axis alone would be a no-op.
+- The old idealised permutation `X→Y, Y→Z, Z→X` was ~90° wrong in azimuth and
+  did not work; and the previous matrix was fit to the *biased mean* gravity
+  (~89° off in azimuth from the corrected gravity) — it "worked" only because
+  the bias cancelled that error. Both are gone.
 
-`cloud_up_vector(quaternions, mounting)` = `mounting @ imu_up_vector(quaternions)`.
+### Applying the correction
 
-### Applying the correction to the cloud
-
-Applied **once, at the very end** of `postprocess_3D()` — after vertex colouring
-(the panorama lookup is referenced to the device frame, so colouring must happen
-first), just before saving:
+Once, at the end of `postprocess_3D()` — after vertex colouring (the pano lookup
+is referenced to the device frame, so colouring must happen first), just before
+saving:
 
 ```python
+cloud_up = MOUNTING @ reference_gravity(quaternions, z_angles)
 leveling = np.eye(4)
-leveling[:3, :3] = leveling_rotation(imu_up).as_matrix()   # maps imu_up -> [0,0,1]
+leveling[:3, :3] = leveling_rotation(cloud_up).as_matrix()   # maps cloud_up -> [0,0,1]
 pcd = transform(pcd, transformation=leveling)
 ```
 
-`leveling_rotation(up)` returns the rotation taking `up` onto `[0,0,1]`
-(`Rotation.align_vectors([Z],[up])`, minimal rotation). Assembling in device
-space and rotating once at the end is equivalent to rotating every plane, and
-keeps the pano colouring valid.
+`leveling_rotation(up)` is `Rotation.align_vectors([Z],[up])` (minimal rotation).
+Assembling in device space and rotating once at the end equals rotating every
+plane, and keeps the pano colouring valid.
 
 ## How success is measured
 
 The honest test is **"is the floor horizontal?"**, not "does `up` map to Z"
-(which is trivially true by construction and proves nothing).
+(trivially true by construction, proves nothing).
 
-Procedure used:
+`experiments/floor_tilt.py` assembles the cloud and estimates the floor normal
+with a **RANSAC plane fit** (Open3D `segment_plane`) over the lowest ~15 % of
+points by Z — robust, unlike the earlier PCA/smallest-singular-vector slab
+estimate. It reports the angle between that normal and +Z for the raw and the
+leveled cloud. `experiments/calibrate_mounting.py` uses the same estimator.
 
-1. Assemble the cloud (device space).
-2. Estimate the **floor plane normal**: take the lowest ~15 % of points in Z and
-   fit a plane by **PCA** (smallest singular vector). ⚠️ This estimate is crude
-   and sensitive to the slab choice — a better method is wanted.
-3. Report the angle between that normal and `[0,0,1]` for:
-   - the raw cloud,
-   - the cloud after `leveling_rotation(cloud_up_vector(...))`.
+## Known facts & limitations
 
-## Known IMU limitations
-
-- **Yaw under-reporting:** the 6-axis DMP fusion has no absolute heading, and in
-  practice it also under-reports *relative* rotation (5°/step → ~2.3°). The axis
-  *direction* is good; the *magnitude* is not. Use the stepper angle for the
+- **Yaw under-reporting:** the 6-axis DMP has no absolute heading and also
+  under-reports *relative* rotation (commanded 5°/step reads back ~2.3°). The
+  axis *direction* is good, the magnitude is not — use the stepper angle for the
   sweep, the IMU only for the axis/tilt.
-- **Biased mean gravity:** with a 180° sweep the mean of `g_body` is not exactly
-  the axis (see above); prefer `fit_turntable_axis().c_body`.
-- **Old firmware failure mode:** the DMP FIFO could wedge (`OSError`) → no
-  quaternions. Fixed by moving to a hardware I²C bus (`i2c6`, GPIO22/23) + block
-  reads; a fresh scan now yields valid unit quaternions.
+- **Flaky DMP init (I²C EIO):** the DMP firmware upload intermittently fails with
+  `OSError` `EIO`/`EREMOTEIO`, even though the chip answers at `0x68`
+  (single-byte register reads/writes always work — only the block upload fails).
+  It usually succeeds within ~3–10 attempts; `MPU6050Wrapper` retries up to 10×.
+  A failed init silently drops the IMU for the whole scan (no `quaternions` → no
+  leveling), so check the pickle. A device reset does not reliably help; suspect
+  a hardware cause (jumper/pull-ups on GPIO22/23).
+- **Warm-up first plane:** the stream is live and the turntable already turning at
+  scan start, so the first plane is a partial arc labelled with a **stale**
+  pre-sweep `z_angle`. `Lidar._finalize_plane()` drops it (anchor mode). It also
+  leaves one extra (stale) leading quaternion, which `reference_gravity()`
+  discards.
+- **Turntable axis:** the reliable body-frame estimate is
+  `fit_turntable_axis().c_body_accel` (gravity-cone fit). The incremental
+  `c_body` has ~14° spread and is less consistent between scans.
 
-## Current measurements
+## Measurements
 
-| scan | raw floor tilt | after leveling | notes |
+Floor tilt = RANSAC floor-normal vs +Z (`experiments/floor_tilt.py`).
+
+| scan | rig tilt (raw floor) | after leveling (new) | notes |
 |---|---|---|---|
-| `261011-1953` | 2.6° | 0.6–1.8° | rig roughly level |
-| `261011-2031` | 10.3° | **4.2° (exported PLY)** | rig tilted ~11° down |
+| `261011-2329` | 18.36° | **0.10°** | used to (re)solve `IMU.MOUNTING` |
+| `261011-2354` | 2.18° | 1.60° | level rig; residual ≈ the ~2° ceiling |
+| `261011-2345` | 2.19° | (no quats) | IMU init failed → not leveled |
 
-So leveling currently removes only ~60 % of the tilt in the real export — it is
-a **partial** correction, not a fix.
+For comparison, on `261011-2329` the old mean-gravity method left **21°**.
 
-## Where it likely goes wrong (candidate hypotheses)
+## Remaining accuracy limit (~2°)
 
-1. **The mounting is under-constrained / mis-calibrated.** It was solved from only
-   two scans using a *crude PCA floor estimate*. A robust calibration (a large
-   flat reference plane, or several tilts, least-squares over many
-   correspondences) is needed.
-2. **The up vector should be the turntable axis, not the mean gravity.** Using
-   `fit_turntable_axis().c_body` (sign-aligned to gravity) instead of
-   `imu_up_vector()` may be more correct for a tilted rig.
-3. **The cloud frame's up may not be exactly the revolve axis** because of the
-   LiDAR's mechanical offset (`LIDAR.Y_OFFSET` etc.) — worth checking whether the
-   assembly introduces a small tilt of its own.
-4. **The floor-normal estimator is unreliable** and may be partly guessing the
-   metric rather than the method being wrong.
+The mounting solved on one scan does not fully generalise: solved on the 18.4°
+scan (`2329`) it reaches 0.10° there, but on the level scan (`2354`) it leaves
+~1.6°. The cause is the body-frame turntable axis — `c_body_accel` differs ~2°
+between the two scans (its `spread_deg` is ~14° in *both*), so the two
+correspondences that define the mounting are only good to ~2°.
 
-## Open question (raised by the user)
+A level scan cannot discriminate the methods (old and new both land near the ~2°
+noise floor); the tilted scan is where the correction matters. Accepted for now.
 
-Should we compute, instead of a single **up vector**, a **full quaternion for the
-scan at stepper angle = 0°** (the scanner's orientation in space at the sweep
-start), and apply *that* to the cloud? This would carry the full orientation
-(including the mounting azimuth) in one object and could subsume the separate
-mounting matrix. It is untested — a good starting point for the next attempt.
+Possible improvements (only if a tighter target is needed): a more robust axis
+estimate (longer sweep / accel-only), or a joint solve over several scans.
+
+## Open question (resolved)
+
+The old "apply a full quaternion at stepper angle 0° instead of an up-vector" idea
+is unnecessary: only the **direction of gravity** matters for "floor
+horizontal", and the mounting already carries the frame azimuth. Yaw is not used
+(no magnetometer), so a single gravity vector suffices.
 
 ## Code map
 
 | piece | location |
 |---|---|
-| DMP read + block FIFO | `lib/imu_driver.py` |
-| axis fit, up vector, mounting, leveling | `lib/imu_orientation.py` |
+| DMP read + block FIFO (+ init retries) | `lib/imu_driver.py` |
+| axis fit, reference gravity, mounting, leveling | `lib/imu_orientation.py` |
 | applied in the pipeline | `lib/pointcloud.py` (`process_raw` / `postprocess_3D`) |
+| warm-up first-plane drop | `lib/lidar_driver.py` (`_finalize_plane`) |
 | config | `config.json` → `IMU` (`i2c_bus`, `MOUNTING`, `LEVEL`) |
-| tests | `tests/test_imu_axis.py` |
-| probe / data capture | `experiments/up_vector_probe.py` |
-| raw quaternion logging | `experiments/imu_orientation/store_quaternions.py` |
+| tests (synthetic geometry) | `tests/test_imu_axis.py` |
+| mount calibration | `experiments/calibrate_mounting.py` |
+| floor-tilt metric | `experiments/floor_tilt.py` |
 
-## Data on hand for the next session
+## Scans on hand
 
-- `scans/261011-1953` — rig roughly level (tilt ~2.8°), 984 quaternions.
-- `scans/261011-2031` — rig tilted down ~11°, 984 quaternions.
-- Both downloaded locally under `scans/`.
+- `261011-2329` — tilted ~18°, 984 quaternions (well-conditioned; used to solve
+  `IMU.MOUNTING`).
+- `261011-2354` — level, 986 quaternions (validates the mounting).
+- `261011-2345` — level, **no** quaternions (IMU init failed).
+- `240827-1322` — old `lidar/`-slice-directory scan: no pickle, no quaternions.
