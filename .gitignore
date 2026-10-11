@@ -14,3 +14,6 @@ meshlab/tmp/*
 
 # usb_dump
 usb_dump/
+
+# https://github.com/PiLiDAR/PiLiDAR-Experiments
+experiments/

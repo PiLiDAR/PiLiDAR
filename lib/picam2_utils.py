@@ -10,11 +10,11 @@ Drives the IMX477 through a single persistent Picamera2 session:
     4. lock 3A (AeEnable=False, AwbEnable=False) and drive the sensor manually
        for the HDR bracket
 
-HDR bracketing uses shutter-for-dark / gain-for-bright: negative EV steps
-lengthen the exposure, positive EV steps raise the gain. This avoids motion
-blur on the bright frames while still recovering shadow detail on the dark
-frames. The IMX477 via libcamera exposes only AnalogueGain (no DigitalGain
-control), so bracket gain is clamped to MAX_ANALOGUE_GAIN.
+HDR bracketing is **shutter-only** at constant gain: the rig is stationary while
+shooting the panorama, so every frame is a long exposure and there is no motion
+blur to trade against — bracketing by shutter keeps the ISO (hence noise) low.
+The gain is chosen as low as possible (ISO 100 preferred, ISO 200 cap) with the
+brightness otherwise coming from exposure time.
 
 Units
 -----
@@ -36,6 +36,23 @@ MAX_ANALOGUE_GAIN = 16.0
 def _ns(seconds):
     """Convert an exposure time in seconds to Picamera2 nanoseconds."""
     return int(round(seconds * 1e9))
+
+
+def choose_gain_exposure(auto_exposure, auto_gain, base_gain=1.0, max_gain=2.0, max_exposure=1.0):
+    """Pick the lowest ISO (gain) that keeps the exposure within ``max_exposure``.
+
+    Brightness is taken from **shutter time, not gain**, to avoid ISO noise:
+    ``base_gain`` (ISO 100) is preferred, and the gain is only raised — up to
+    ``max_gain`` (ISO 200) — when the exposure would otherwise exceed
+    ``max_exposure`` seconds. Returns ``(exposure_time_seconds, gain)``.
+    """
+    # exposure needed to keep the same light at the (low) base gain
+    e_base = auto_exposure * auto_gain / base_gain
+    if not max_exposure or e_base <= max_exposure:
+        return e_base, base_gain
+    # dark scene: raise gain to the cap to shorten the exposure
+    gain = max(base_gain, max_gain)
+    return auto_exposure * auto_gain / gain, gain
 
 
 class Camera:
@@ -127,23 +144,26 @@ class Camera:
         gain / ``[R, B]``.
         """
         preview_dims = config.get("CAM", "preview_dims")
-        set_gain = config.get("CAM", "set_gain")
+        base_gain = config.get("CAM", "base_gain")
+        max_gain = config.get("CAM", "max_gain")
+        max_exposure = config.get("CAM", "max_exposure")
 
         self.configure(still_dims=preview_dims)
         self._settle()
 
         meta = self.camera.capture_metadata()
-        exposure_time = meta["ExposureTime"] / 1e9          # ns -> s
-        gain = meta["AnalogueGain"] * meta["DigitalGain"]   # total linear gain
-        awbgains = list(meta["ColourGains"])                # [R, B]
+        auto_exposure = meta["ExposureTime"] / 1e9               # ns -> s
+        auto_gain = meta["AnalogueGain"] * meta["DigitalGain"]   # total linear gain
+        awbgains = list(meta["ColourGains"])                     # [R, B]
 
         self._lock_3a()
 
-        # Optionally pin the gain and recompute the exposure to keep the same
-        # overall exposure (exposure is inversely proportional to gain).
-        if set_gain:
-            gain = set_gain
-            exposure_time = exposure_time * (gain / (meta["AnalogueGain"] * meta["DigitalGain"]))
+        # Take brightness from shutter time, not gain, to avoid ISO noise: use the
+        # lowest gain (ISO 100) unless that would need too long an exposure.
+        exposure_time, gain = choose_gain_exposure(
+            auto_exposure, auto_gain, base_gain=base_gain,
+            max_gain=max_gain, max_exposure=max_exposure,
+        )
 
         return exposure_time, gain, awbgains
 
@@ -159,13 +179,16 @@ class Camera:
         self.camera.capture_file(path)
         return path
 
-    def take_hdr(self, path, AEB, AEB_stops, exposure_time, gain, awbgains):
-        """Capture an HDR bracket using shutter-for-dark / gain-for-bright.
+    def take_hdr(self, path, AEB, AEB_stops, exposure_time, gain, awbgains, max_exposure=1.0):
+        """Capture an HDR bracket by **shutter only** (constant gain).
 
-        Negative EV steps lengthen the exposure, positive EV steps raise the
-        gain. Filenames carry the EV offset (``..._<ev>.jpg``) so the Hugin
-        reorder step can match them to the template's per-angle EV order.
-        Assumes the camera is already configured at the still resolution.
+        The rig is stationary while shooting the panorama, so every frame is a
+        long exposure and there is no motion blur to trade against — bracketing
+        by shutter keeps the ISO low (hence low noise). The gain stays at the
+        calibrated (base) value for every frame; negative EV steps lengthen the
+        exposure and positive EV steps shorten it, clamped to ``max_exposure``.
+        Filenames carry the EV offset (``..._<ev>.jpg``) so the Hugin reorder
+        step can match them to the template's per-angle EV order.
         """
         path_split = os.path.splitext(path)
         AEB = int(AEB)
@@ -175,14 +198,11 @@ class Camera:
         self._lock_3a()
 
         for step in range(-AEB, AEB + 1):
-            if step < 0:
-                hdr_exposure_time = exposure_time * (stop_multiplier ** step)
-                hdr_gain = gain
-            else:
-                hdr_exposure_time = exposure_time
-                hdr_gain = gain * (stop_multiplier ** step)
+            hdr_exposure_time = exposure_time * (stop_multiplier ** -step)
+            if max_exposure:
+                hdr_exposure_time = min(hdr_exposure_time, max_exposure)
 
-            self._set_manual(hdr_exposure_time, hdr_gain, awbgains)
+            self._set_manual(hdr_exposure_time, gain, awbgains)
             if step == -AEB:
                 self._flush()  # drop the startup auto-mode frame once
             hdr_path = f"{path_split[0]}_{step * AEB_stops}{path_split[1]}"

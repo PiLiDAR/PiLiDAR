@@ -82,7 +82,9 @@
     "CAM": {
         "preview_dims": [320, 240],
         "dims": [4056,3040],
-        "set_gain": 1,
+        "base_gain": 1.0,
+        "max_gain": 2.0,
+        "max_exposure": 1.0,
         "AEB": 1,
         "AEB_STOPS": 2
     },
