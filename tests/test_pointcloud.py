@@ -4,6 +4,8 @@ import pickle
 
 import numpy as np
 
+from lib.pointcloud import load_raw_scan, save_raw_scan
+
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
 
@@ -19,6 +21,52 @@ def test_load_synthetic_fixture():
     assert result.shape[1] == 4
     assert result.shape[0] == 48  # 4 slices x 12 points
     assert not np.isnan(result).any()
+
+
+def test_open_container_roundtrip(tmp_path):
+    """save_raw_scan <-> load_raw_scan preserve a raw scan as NPZ + JSON."""
+    fans = [np.random.rand(5, 3), np.random.rand(7, 3), np.random.rand(3, 3)]
+    raw_scan = {
+        "header": {"scan_id": "rt", "device_id": "STL27L"},
+        "z_angles": [0.0, 90.0, 180.0],
+        "angular": None,
+        "cartesian": fans,
+        "quaternions": np.arange(12, dtype=np.int16).reshape(3, 4),
+    }
+    path = str(tmp_path / "rt_lidar.pkl")           # legacy-style path -> .npz/.json
+    save_raw_scan(path, raw_scan)
+
+    assert os.path.exists(str(tmp_path / "rt_lidar.npz"))
+    assert os.path.exists(str(tmp_path / "rt_lidar.json"))
+
+    loaded = load_raw_scan(path)
+    assert loaded["header"]["scan_id"] == "rt"
+    assert np.allclose(loaded["z_angles"], [0.0, 90.0, 180.0])
+    assert len(loaded["cartesian"]) == 3
+    for got, want in zip(loaded["cartesian"], fans):
+        assert got.shape == want.shape
+        assert np.allclose(got, want)
+    assert np.array_equal(loaded["quaternions"], raw_scan["quaternions"])
+
+
+def test_open_container_without_quaternions(tmp_path):
+    raw_scan = {"header": {}, "z_angles": [0.0], "cartesian": [np.random.rand(4, 3)]}
+    path = str(tmp_path / "noq_lidar.pkl")
+    save_raw_scan(path, raw_scan)
+    loaded = load_raw_scan(path)
+    assert "quaternions" not in loaded
+    assert len(loaded["cartesian"]) == 1
+
+
+def test_load_falls_back_to_legacy_pickle(tmp_path):
+    """A plain .pkl with no sibling .npz still loads."""
+    raw_scan = {"header": {}, "z_angles": [0.0, 90.0],
+                "cartesian": [np.random.rand(3, 3), np.random.rand(3, 3)]}
+    path = str(tmp_path / "legacy_lidar.pkl")
+    with open(path, "wb") as f:
+        pickle.dump(raw_scan, f)
+    loaded = load_raw_scan(path)
+    assert len(loaded["cartesian"]) == 2
 
 
 def test_load_slice_directory():

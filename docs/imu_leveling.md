@@ -57,9 +57,10 @@ accel/gyro-fused, no magnetometer, so yaw drifts but the Z reference is gravity)
 - `cartesian` — the 2D fan (X, I columns) for that plane,
 - `quaternions` — one MPU6050 DMP quaternion `(w,x,y,z)` int16 per plane.
 
-All saved in `scans/<id>/<id>_lidar.pkl`. `quaternions` is present only when the
-IMU initialised; the flaky DMP upload (see below) can silently drop it, so check
-for it before expecting a leveled export.
+All saved in `scans/<id>/<id>_lidar.npz` (+ `.json` metadata; legacy `.pkl`
+supported). `quaternions` is present only when the IMU initialised; the flaky
+DMP upload (see below) can silently drop it, so check for it before expecting a
+leveled export.
 
 Crucially: the **stepper angle is trusted**; the **IMU yaw is not** (the DMP
 under-reports rotation — a commanded 5°/step reads back ~2.3°; see "Known facts

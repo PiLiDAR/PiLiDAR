@@ -3,6 +3,17 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-10-12
+
+### Changed
+- **Raw scans now use an open container instead of pickle.** `save_raw_scan()` writes `<scan_id>_lidar.npz` (arrays) + `<scan_id>_lidar.json` (metadata sidecar: header, plane/point counts, angle range, `has_quaternions`) — no more Python-locked `.pkl`. The ragged per-plane fans are stacked losslessly into one `(n_points, cols+1)` array (column 0 = plane index) so the per-plane point counts survive.
+- **`load_raw_scan()` prefers the open container** and transparently falls back to the legacy `.pkl`, so existing scans keep loading unchanged. `process_raw()` detects either form.
+- `PiLiDAR.py` / `lib/lidar_driver.py` need no change — they call `save_raw_scan`; new scans simply emit the open container.
+
+### Added
+- **`experiments/convert_scans.py`:** convert legacy `*_lidar.pkl` scans to the open container (leaves the `.pkl` in place). Validated: lossless round-trip on real scan `261011-2329` (983 planes, 2.1 M points, quaternions).
+- Tests: open-container round-trip, no-quaternions, and legacy-pickle fallback. Suite now 71 tests.
+
 ## [2.5.14] - 2026-10-11
 
 ### Fixed

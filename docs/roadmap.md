@@ -4,7 +4,6 @@
 Code: https://github.com/PiLiDAR/PiLiDAR
 Hardware: https://github.com/PiLiDAR/PiLiDAR-Hardware
 
-
 ## ACCESS THE DEVICE USING SSH
 ```bash
 ssh pi@192.168.1.16
@@ -16,281 +15,152 @@ enable password-less login:
 ssh-copy-id -i ~/.ssh/id_ed25519.pub flip@192.168.1.16
 ```
 
-
 ## Overview
 PiLiDAR is an open-source, low-cost DIY 360° LiDAR scanner and panoramic 3D reconstruction system. This roadmap guides the project from an experimental research prototype into a robust, repeatable, and maintainable platform ready for community use and field deployment.
 
 The project follows a disciplined engineering pipeline:
 **Capture -> Validate -> Calibrate -> Process -> Register -> Export**
 
-### Phases Summary
-- **[Phase 0 — Foundation, CI/CD, and Mock Testing Harness](#phase-0--foundation-cicd-and-mock-testing-harness):** Modern tooling (`pyproject.toml`), decouple from physical hardware with mock harnesses, and establish automated regression testing.
-- **[Phase 1 — Hardware Abstraction & High-Speed Acquisition Stack](#phase-1--hardware-abstraction--high-speed-acquisition-stack):** Zero-drop multithreaded serial reader at 921,600 baud, modern GPIO (`gpiozero`/`lgpio`), native `Picamera2`, and pre-flight hardware diagnostics.
-- **[Phase 2 — Open Data Standards & Geometric Calibration](#phase-2--open-data-standards--geometric-calibration):** Replace pickle storage with open containers (NPZ/HDF5/PLY/LAS) and formalize LiDAR-to-camera 6-DOF extrinsics calibration.
-- **[Phase 3 — Unified CLI & Processing Pipeline Engine](#phase-3--unified-cli--processing-pipeline-engine):** Consolidate ad-hoc scripts into a unified `pilidar` CLI and deterministic end-to-end processing pipeline.
-- **[Phase 4 — Field Usability: Local Web UI & Remote Operation](#phase-4--field-usability-local-web-ui--remote-operation):** Lightweight mobile web controller over Wi-Fi hotspot and hardened hardware status indicators for untethered tripod scanning.
-- **[Phase 5 — Multi-Scan Registration & Advanced Reconstruction](#phase-5--multi-scan-registration--advanced-reconstruction):** Multi-station point cloud alignment, IMU gravity vector leveling, Poisson meshing, and ASTM E57 export.
-- **[Phase 6 — Packaging, Documentation & Community Release](#phase-6--packaging-documentation--community-release):** Automated `install.sh` bootstrap, updated BOM, verified 3D CAD/print files, and comprehensive maker build guide.
+## Status at a glance
+- ✅ **Phase 0** — Foundation, CI/CD, mock harness.
+- ✅ **Phase 1** — Hardware abstraction, acquisition stack, diagnostics.
+- 🟡 **Phase 2** — Open data standards & calibration (panorama refined; open containers + extrinsics still open).
+- ⬜ **Phase 3** — Unified CLI & processing pipeline engine.
+- ⬜ **Phase 4** — Field usability: local web UI & remote operation.
+- 🟡 **Phase 5** — Multi-scan registration & reconstruction (IMU gravity leveling ✅ done; registration/meshing/E57 open).
+- ⬜ **Phase 6** — Packaging, documentation & community release.
+
+## Next up
+1. **Phase 2 — LiDAR↔camera 6-DOF extrinsics calibration** (known-target fixture).
+2. **Phase 2 — Panorama: shared lens distortion + metadata provenance** in the sidecar.
+3. **Phase 3 — Unified `pilidar` CLI** (`capture` / `process` / `export` / `calibrate`, incl. `pilidar convert`).
 
 ---
 
 ## Phase 0 — Foundation, CI/CD, and Mock Testing Harness — ✅ done (v2.4.0)
-**Objective:** Modernize tooling, decouple development from physical hardware, and establish automated regression testing.
-
-### Goals
-- Allow developers and contributors to build, test, and verify algorithms without physical scanner hardware attached.
-- Establish clean packaging, linting, and continuous integration.
-- Prevent regression while refactoring legacy components.
-
-### Tasks
-- **Modern Python Packaging** — ✅ done (v2.4.0, `pyproject.toml`)
-  - ~~Transition from loose scripts and unpinned `requirements.txt` to standard `pyproject.toml`.~~ → `pyproject.toml` is now the source of truth for metadata + dependencies; `requirements.txt` retained for the Pi bootstrap.
-  - ~~Define explicit dependency groups: `pi-hardware` (GPIO, camera), `processing` (Open3D, OpenCV, SciPy), and `dev` (pytest, ruff).~~ → `pi-hardware` and `dev` optional-dependency groups defined; core processing deps in the base `dependencies`.
-  - ~~Modernize platform detection in `lib/platform_utils.py` using kernel and device-tree checks instead of brittle architecture strings.~~ → done in v2.0.0 (device-tree `/proc/device-tree/model` + `/etc/rpi-issue`).
-- **Hardware Mocking & Packet Replay Harness** — ✅ done (v2.4.0, `tests/mock_hardware.py`)
-  - ~~Build `MockLidarSerial` to simulate serial streams by replaying recorded raw byte streams for LD06 and STL27L.~~ → `MockLidarSerial` + `build_packet()`/`crc8()` synthesise valid packets from the project CRC table; `tests/fixtures/capture.bin` is a replayable stream.
-  - ~~Implement a mock camera and mock stepper driver for desktop simulation and headless environments.~~ → `MockCamera` and `MockStepper` stand-ins added.
-  - ~~Check in a minimal, anonymized synthetic sample scan dataset under `tests/fixtures/`.~~ → `synthetic_lidar.pkl` + `lidar/` slice dir checked in; regenerate via `python tests/make_fixture.py`.
-- **Automated Testing & CI Pipeline** — ✅ done (v2.4.0, `tests/`, `.github/workflows/ci.yml`)
-  - ~~Implement `pytest` test suite covering CRC8 validation and corrupted packet recovery, polar-to-Cartesian transforms and geometric offsets, and point cloud loading.~~ → 25 tests across `test_crc.py`, `test_packet.py`, `test_pointcloud.py`, `test_harness.py`.
-  - ~~Add GitHub Actions CI workflow for automated linting (`ruff`) and running test suites across Linux, macOS, and Windows.~~ → matrix over 3 OSes × Python 3.11/3.12.
-
-### Deliverables
-- `pyproject.toml` configuration and clean virtual environment setup.
-- Mock serial/stepper/camera test fixtures.
-- Working `pytest` suite running in automated GitHub Actions CI.
-
-### Success criteria
-The test suite passes in CI on desktop machines without physical hardware or Raspberry Pi peripherals connected. ✅ (25/25 pass locally on desktop)
+Modern tooling (`pyproject.toml`), hardware mock harness (`MockLidarSerial`/`MockCamera`/`MockStepper` + synthetic fixtures), and a `pytest` suite in GitHub Actions CI (3 OS × Python 3.11/3.12). The suite passes on desktop without any physical hardware.
 
 ---
 
-## Phase 1 — Hardware Abstraction & High-Speed Acquisition Stack 
-**Objective:** Harden the acquisition layer for modern Raspberry Pi OS, eliminate serial packet drops at high baudrates, and ensure reliable motion control.
-
-### Goals
-- Support Raspberry Pi OS Bookworm (Debian 12); **Trixie (Debian 13) support is planned — the Pi will migrate soon** (verify lgpio/libcamera/Hugin/pymeshlab on Trixie, add it to the supported-OS matrix).
-- Ensure 100% packet integrity at 921,600 baud without buffer overruns.
-- Provide deterministic stepper motion and responsive hardware controls.
-
-### Tasks
-- **High-Speed Serial Driver Overhaul** — ✅ done (v2.5.0 driver, v2.5.3 benchmark)
-  - ~~Replace byte-by-byte reads (`read()`) with buffered block reads and sliding window frame parsers.~~ → 4 KB block reads + sliding-window parser with CRC8 validation and automated sync-byte recovery (`lib/lidar_driver.py`).
-  - ~~Implement a dedicated background reader thread with a bounded thread-safe queue to decouple serial I/O from processing.~~ → `start_reader()`/`read_from_queue()` with `LIDAR.<DEVICE>.QUEUE_SIZE` (default 1024).
-  - ~~Add automated sync-byte recovery, timeout handling, and malformed packet error logging.~~ → done; `dropped_packets`/`malformed_packets` counters exposed.
-  - ~~Benchmark and validate sustained throughput across all supported models: LD06, LD19, and STL27L.~~ → validated on hardware with `experiments/serial_benchmark.py`: STL27L @ 921,600 baud sustained 30 s at 1796.7 packets/s (0.2% deviation from the nominal 1800), 21,561 samples/s, **0 dropped, 0 malformed**, queue high-water 340/1024. LD06/LD19 validation pending hardware availability.
-- **Modern GPIO & Motion Control** — ✅ done (v2.5.1)
-  - ~~Migrate from deprecated `RPi.GPIO` to modern `gpiozero` / `lgpio` (compatible with Pi 4, Pi 5, and kernel 6.x+).~~ → completed via the lgpio C-API (`gpiochip_open`/`gpio_claim_output`/`gpio_write`): `gpio_interrupt.py` (v2.5.0), `lib/a4988_driver.py` + the relay setup in `lib/config.py` (v2.5.1). No `RPi.GPIO` imports remain.
-  - Investigate hardware timer / PWM stepping to eliminate userspace `time.sleep` jitter during sweeps.
-  - Evaluate endstop or home-position switch support to prevent cumulative stepper angle drift.
-- **Camera Subsystem Modernization (3A + HDR)** — ✅ done (v2.2.0 backend, v2.3.0 cleanup, `lib/picam2_utils.py`)
-  - ~~Migrate from repeated `rpicam-still` subprocess invocations to native `Picamera2` Python bindings.~~ → `lib/picam2_utils.py` drives a single persistent Picamera2 session; the `rpicam-still` fallback was removed in v2.3.0 (Pi-only project).
-  - ~~Maintain a persistent sensor session so AE/AWB state is not re-discovered per frame.~~ → `Camera` context manager keeps one session across all angles.
-  - ~~Replace the iterative AWB loop.~~ → `estimate_parameters()` lets 3A settle over a few frames, reads `ExposureTime` / `AnalogueGain` / `DigitalGain` / `ColourGains` from `capture_metadata()`, then locks 3A (`AeEnable=False`, `AwbEnable=False`). No EXIF parsing, no iteration.
-  - ~~Preserve the shutter-for-dark / gain-for-bright HDR bracket.~~ → `take_hdr()` keeps negative-EV-via-shutter / positive-EV-via-gain; gain clamped to `MAX_ANALOGUE_GAIN = 16` (the IMX477 via libcamera exposes no `DigitalGain` control).
-  - ~~Watch the units.~~ → ns↔s and linear-gain conversions handled at the module boundary.
-- **Pre-Flight Hardware Diagnostics** — ✅ done (v2.5.4, `lib/diagnostics.py`)
-  - ~~Implement an automated diagnostic routine (`pilidar doctor`) checking UART communication, I2C IMU connectivity, camera availability, and storage space before beginning a scan.~~ → `python -m lib.diagnostics` checks Python/platform/storage/Hugin plus UART packet stream, MPU6050 `WHO_AM_I` over I2C, Picamera2 enumeration, and gpiochip access. Non-fatal WARN/SKIP, exit code 1 on any FAIL so it can gate a scan; `--json` for machine output. Validated on the Pi: 8/8 OK. (The Phase 3 CLI will expose it as `pilidar doctor`.)
-
-### Deliverables
-- Zero-drop, multithreaded serial driver for LD06/STL27L.
-- Modernized GPIO and stepper driver module.
-- Hardware diagnostic utility (`pilidar doctor`).
-
-### Success criteria
-A full 180° sweep with the STL27L captures continuously at 921,600 baud with 0 dropped packets and consistent angular step intervals.
+## Phase 1 — Hardware Abstraction & High-Speed Acquisition Stack — ✅ done
+- **Serial driver** (v2.5.0/2.5.3): 4 KB block reads + sliding-window CRC8 parser with sync recovery, background reader thread + bounded queue. Benchmarked on hardware: STL27L @ 921,600 baud sustained 1796.7 packets/s, **0 dropped, 0 malformed**.
+- **GPIO & motion** (v2.5.1): lgpio C-API throughout (`gpio_interrupt.py`, `lib/a4988_driver.py`, relay); no `RPi.GPIO` imports remain.
+- **Camera** (v2.2.0/2.3.0, `lib/picam2_utils.py`): native Picamera2, persistent session, 3A settle→read→lock, shutter-for-dark/gain-for-bright HDR bracket.
+- **Diagnostics** (v2.5.4): `python -m lib.diagnostics` (platform/storage/Hugin + UART stream, MPU6050 `WHO_AM_I`, Picamera2, gpiochip). Non-fatal WARN/SKIP, exit 1 on FAIL; validated 8/8 on the Pi.
+- **Open (small):** hardware-timer/PWM stepping to remove userspace sleep jitter; homing/endstop to prevent cumulative angle drift.
+- **Target OS:** Bookworm (Debian 12); **Trixie (Debian 13) migration planned** — verify lgpio/libcamera/Hugin/pymeshlab and add to the supported matrix.
 
 ---
 
-## Phase 2 — Open Data Standards & Geometric Calibration 
+## Phase 2 — Open Data Standards & Geometric Calibration
 **Objective:** Replace unversioned pickle storage with open, standardized file formats and establish rigorous calibration procedures.
 
-### Goals
-- Eliminate insecure and Python-locked `.pkl` scan files.
-- Enable full transparency and cross-platform inspection of raw and processed scans.
-- Formally measure and model the physical geometric relationships between LiDAR, camera, and the rotation axis.
+### Remaining tasks
+- **Standardized scan container & metadata** — *open container ✅ done (v2.6.0)*
+  - ✅ Raw scans saved as `<id>_lidar.npz` + `<id>_lidar.json` (deprecates pickle writing; `load_raw_scan` falls back to legacy `.pkl`); `experiments/convert_scans.py` converts old scans.
+  - ✅ 3D outputs are already PLY with intensity.
+  - ⬜ Move the raw *time-series* (range/angle packets) to a documented schema if needed.
+  - ⬜ Enrich the `metadata.json` sidecar with full device/software/config provenance (currently header fields are placeholders).
+  - ⬜ A standalone legacy-`.pkl` → open-format converter is provided as an experiment; promote into the CLI (`pilidar convert`) in Phase 3.
+- **LiDAR↔camera 6-DOF extrinsics calibration**
+  - Formalize the rigid-body transform ($X, Y, Z, \text{roll}, \text{pitch}, \text{yaw}$) between the LiDAR optical center, the stepper rotation axis, and the camera sensor center.
+  - Build a semi-automated calibration utility using a known physical fixture (corner target / planar board).
+- **Panorama geometry (remaining)**
+  - Make lens distortion a **shared/linked** parameter across all images of the same lens (templates currently bake it into image 0 only, leaving images 1–3 un-corrected).
+  - Persist the optimized per-lens distortion + per-mount extrinsics into the scan `metadata.json` so future scans seed from a measured prior instead of a hand-authored template.
+  - *Optional* two-stage pipeline: pre-fuse each angle's bracket with `enfuse` into one base image, then solve geometry on the 4 base images (one per 90°).
+- **Camera intrinsics & exposure normalization**
+  - Automate/document lens-distortion calibration (fisheye / equirectangular projection parameters).
+  - Standardize AE/AWB normalization to eliminate seam artifacts in 360° panoramas.
 
-### Tasks
-- **Standardized Scan Container & Metadata**
-  - Deprecate `pickle.dump` / `pickle.load` for scan persistence.
-  - Adopt open raw containers: compressed NPZ / HDF5 for raw time-series range and angle packets.
-  - Adopt standardized 3D outputs: PLY and LAS formats with intensity attributes and structured `metadata.json` sidecars (recording calibration parameters, timestamps, hardware revisions, and software versions).
-- **LiDAR-to-Camera 6-DOF Extrinsics Calibration**
-  - Formalize rigid-body transform matrix ($X, Y, Z, \text{roll}, \text{pitch}, \text{yaw}$) between LiDAR optical center, stepper rotation axis, and camera sensor center.
-  - Build a semi-automated calibration utility using a known physical fixture (e.g. corner target or planar board).
-- **Panorama Geometry Refinement (Hugin feature matching + optimization)**
-  - **Done (v2.1.0):** `hugin_refine()` in `lib/pano_utils.py` now runs `cpfind`/`cpclean`/`linefind`/`pto_var`/`autooptimiser` before blending, refining per-mount extrinsics (yaw/pitch/roll) and shared lens distortion from control points instead of trusting the fixed template. It is Flatpak-aware (`_run_hugin()`) and is the default path via `PANO.REFINE`. Validated on scan `240827-1322`: seam ghosting (e.g. the gray pillows) is eliminated versus the template-only original.
-  - **Corrected `pto_var`:** translations are locked (no `TrX/TrY/TrZ` — a rotational pano must not translate, or you get parallax), image 0 is fully anchored (`!r0,!p0,!y0`), and distortion (`Ra..Re,a..e`) is optimized on all images so they converge consistently.
-  - **Done (v2.1.1):** fixed the template image-ordering bug — `_template_ev_order()` parses each template's per-angle EV sequence and `_reorder_imglist()` re-sorts each angle group to match before `pto_gen`, so the EV-0 anchor/distortion priors land on the correct frame in both `hugin_stitch()` and `hugin_refine()`.
-  - **Remaining work:**
-    - **Make lens distortion a shared/linked parameter** across all images of the same lens (templates currently bake it into image 0 only, leaving images 1–3 un-corrected).
-    - **Persist the optimized per-lens distortion + per-mount extrinsics** into the scan `metadata.json` sidecar so future scans seed from a measured prior instead of a hand-authored template.
-    - **Optional two-stage pipeline:** pre-fuse each angle's bracket with `enfuse` into one base image and run the geometry solve on the 4 base images (one per 90°) — simpler ordering and cleaner control points for high-contrast/texture-poor scenes.
-- **Camera Intrinsic & Panorama Exposure Normalization**
-  - Document and automate lens distortion calibration (fisheye / equirectangular projection parameters).
-  - Standardize auto-exposure and white balance normalization routines to eliminate seam artifacts in 360° panoramas.
-
-### Deliverables
-- Versioned scan directory schema with `metadata.json` specification.
-- Geometric calibration scripts and step-by-step calibration guide.
-- Backward compatibility converter for legacy `.pkl` scans.
+### Done already
+- `hugin_refine()` (v2.1.0): `cpfind`/`cpclean`/`linefind`/`pto_var`/`autooptimiser` refine per-mount extrinsics + shared lens distortion from control points (Flatpak-aware, default via `PANO.REFINE`). Validated on `240827-1322` (seam ghosting eliminated).
+- `pto_var` corrections: translations locked (rotational pano must not translate), image 0 anchored, distortion optimized across images.
+- Template EV-ordering fix (v2.1.1): `_template_ev_order()` + `_reorder_imglist()` align each angle's bracket to the template's EV prior.
 
 ### Success criteria
-Scans can be opened and visualized in third-party tools (CloudCompare, MeshLab, Blender) without requiring Python or PiLiDAR source code.
+Scans open in third-party tools (CloudCompare, MeshLab, Blender) with no Python/PiLiDAR source required.
 
 ---
 
-## Phase 3 — Unified CLI & Processing Pipeline Engine 
+## Phase 3 — Unified CLI & Processing Pipeline Engine
 **Objective:** Replace scattered root scripts with a clean, modular CLI and a deterministic end-to-end processing pipeline.
 
-### Goals
-- Replace ad-hoc scripts (`filter_3D.py`, `process_3D.py`, `meshing_test.py`) with a single command-line interface.
-- Provide deterministic, single-command processing from raw scan to colorized point cloud.
-
-### Tasks
-- **Unified CLI Application**
-  - Consolidate tools under a modular CLI (e.g. `pilidar` using `typer` or `argparse`):
-    - `pilidar capture`: Run acquisition workflow with configurable flags.
-    - `pilidar process`: Assemble point clouds, project panorama vertex colors, and apply filters.
-    - `pilidar export`: Convert and export scans to PLY, LAS, PCD, or E57.
-    - `pilidar calibrate`: Run hardware calibration workflows.
-- **Point Cloud Preprocessing & Noise Rejection**
-  - Implement statistical outlier removal (SOR) and radius outlier removal (ROR).
-  - Add intensity threshold filtering to discard weak returns and ambient optical reflections.
-  - Implement voxel grid downsampling with preserved color and intensity attributes.
-- **Pipeline Automation & Progress Reporting**
-  - Implement clear terminal progress bars and structured logging.
-  - Support batch processing across multiple raw scan directories.
-
-### Deliverables
-- Installable `pilidar` CLI package.
-- Clean end-to-end processing pipeline module.
-- Documented CLI reference guide.
+- **Unified CLI** (`pilidar`, e.g. `typer`/`argparse`):
+  - `pilidar capture` — acquisition with configurable flags.
+  - `pilidar process` — assemble clouds, project panorama vertex colors, apply filters.
+  - `pilidar export` — PLY / LAS / PCD / E57.
+  - `pilidar calibrate` — hardware calibration workflows.
+  - (also expose `pilidar doctor` from Phase 1.)
+- **Preprocessing & noise rejection:** statistical (SOR) and radius (ROR) outlier removal; intensity threshold filtering; voxel downsampling preserving color/intensity.
+- **Pipeline automation:** progress bars + structured logging; batch processing across raw scan directories.
+- Replace ad-hoc scripts (`filter_3D.py`, `process_3D.py`, `meshing_test.py`).
 
 ### Success criteria
-Running `pilidar process <scan_dir>` turns a raw capture folder into a clean, vertex-colorized 3D point cloud with a single command.
+`pilidar process <scan_dir>` turns a raw capture folder into a clean, vertex-colorized point cloud in a single command.
 
 ---
 
-## Phase 4 — Field Usability: Local Web UI & Remote Operation 
-**Objective:** Make PiLiDAR practical in the field on a tripod without requiring an SSH session or tethered monitor.
+## Phase 4 — Field Usability: Local Web UI & Remote Operation
+**Objective:** Make PiLiDAR practical in the field on a tripod without an SSH session or tethered monitor.
 
-### Goals
-- Enable untethered field operation via smartphone or tablet.
-- Provide visual feedback and system health monitoring during scanning.
-
-### Tasks
-- **Lightweight Local Web Controller**
-  - Build a lightweight backend (FastAPI / aiohttp) designed to run on the Raspberry Pi.
-  - Implement a mobile-responsive web dashboard accessible over the Pi's Wi-Fi hotspot (`http://pilidar.local`):
-    - Real-time scanner state (Idle, Scanning, Stitching, Complete, Error).
-    - Trigger scans and select presets (Quick Preview, High Resolution, HDR).
-    - Camera live preview for framing before initiating a sweep.
-    - Battery voltage, CPU temperature, and available disk space indicators.
-    - In-browser scan library to inspect thumbnails and download exported PLY/E57 files.
-- **Hardened Hardware Button & Status LED**
-  - Refactor `gpio_interrupt.py` into a standard systemd service with debounced inputs.
-  - Add support for multi-color status LEDs or buzzer feedback (ready, scanning, error, shutdown).
-
-### Deliverables
-- Headless Web UI application and systemd service files.
-- Refactored hardware button and LED daemon.
-- Hotspot configuration documentation.
+- **Lightweight local web controller** (FastAPI/aiohttp), mobile-responsive over the Pi hotspot (`http://pilidar.local`):
+  - Real-time state (Idle / Scanning / Stitching / Complete / Error).
+  - Trigger scans; presets (Quick Preview / High Res / HDR).
+  - Camera live preview for framing.
+  - Battery voltage, CPU temperature, free disk space.
+  - In-browser scan library (thumbnails, download PLY/E57).
+- **Hardened button & status LED:** refactor `gpio_interrupt.py` into a debounced systemd service; multi-color LED / buzzer feedback (ready, scanning, error, shutdown).
 
 ### Success criteria
-A user can set up the scanner on a tripod, connect via mobile phone, preview framing, trigger a scan, and download the finished point cloud without ever opening a terminal.
+A user can set up the tripod, connect by phone, preview, trigger a scan, and download the cloud without touching a terminal.
 
 ---
 
-## Phase 5 — Multi-Scan Registration & Advanced Reconstruction 
+## Phase 5 — Multi-Scan Registration & Advanced Reconstruction
 **Objective:** Merge multiple station scans into an accurate, complete 3D scene.
 
-### Goals
-- Combine point clouds from different tripod locations into a single coordinate system.
-- Support professional export formats for BIM, CAD, and VFX workflows.
-
-### Tasks
-- **Multi-Station Alignment Pipeline**
-  - Generalize registration workflows into a multi-scan alignment tool (`pilidar register`).
-  - Implement two-stage registration:
-    - Global coarse alignment: FPFH feature extraction and RANSAC matching.
-    - Fine alignment: Point-to-Plane ICP and Color-ICP refinement.
-- **IMU Gravity Prior Integration**
-  - Utilize MPU6050 accelerometer data to calculate the scanner's gravity vector (leveling plane).
-  - Constrain registration transformations to yaw and horizontal translation, dramatically reducing drift and alignment failure.
-- **Surface Meshing & Professional Export**
-  - Implement Poisson surface reconstruction with normal estimation and density trimming.
-  - Standardize ASTM E57 export including structured panoramic image projections compatible with CloudCompare, RealityCapture, Revit, and Blender.
-
-### Deliverables
-- Multi-scan registration command and alignment error reporting.
-- E57 export module with embedded spherical panoramic imagery.
-- Poisson mesh generation pipeline.
+- **Multi-station alignment** (`pilidar register`): global coarse (FPFH + RANSAC) then fine (point-to-plane ICP, color-ICP).
+- **IMU gravity prior integration** — *leveling half ✅ done (v2.5.14)*; *registration constraint ⬜ open*:
+  - ✅ Gravity vector / leveling plane from the MPU6050; every export is leveled to gravity. See [`docs/imu_leveling.md`](imu_leveling.md).
+  - ⬜ Constrain registration to **yaw + horizontal translation** using the gravity direction (roll/pitch locked) — reduces drift and alignment failures.
+- **Surface meshing & professional export:** Poisson reconstruction with normal estimation and density trimming; ASTM E57 with structured panoramic projections (CloudCompare, RealityCapture, Revit, Blender).
 
 ### Success criteria
-Multiple overlapping scans align into a cohesive 3D model with measurable registration error under 15 mm in typical indoor test scenes.
+Multiple overlapping scans align into a cohesive model with registration error under 15 mm in typical indoor scenes.
 
 ---
 
-## Phase 6 — Packaging, Documentation & Community Release  
+## Phase 6 — Packaging, Documentation & Community Release
 **Objective:** Polish the project for external builders, makers, and contributors.
 
-### Goals
-- Enable any maker with a 3D printer and soldering iron to build a working PiLiDAR scanner.
-- Ensure smooth installation on fresh Raspberry Pi OS installations.
-
-### Tasks
-- **One-Command Setup & Bootstrap Script**
-  - Create an automated setup script (`install.sh`) to configure UART permissions, I2C, system dependencies (Hugin, libgl), and python packages.
-- **Hardware & Bill of Materials Refresh**
-  - Verify and update vendor links, current pricing, and component alternatives in `README.md`.
-  - Validate and release 3D printable files (STEP/STL) for the main body and planetary gearbox.
-  - Create clear wiring schematics for Raspberry Pi 4 and Raspberry Pi 5.
-- **Comprehensive Documentation**
-  - Step-by-step Build Guide (assembly, wiring, flashing OS).
-  - Software Quickstart Guide.
-  - Troubleshooting & Calibration FAQ.
-
-### Deliverables
-- One-line automated install script.
-- Complete hardware CAD repository and build guide.
-- Tagged `v1.0.0` release candidate.
+- **One-command setup:** `install.sh` (UART permissions, I2C, system deps like Hugin/libgl, Python packages).
+- **Hardware & BOM refresh:** verify vendor links/pricing/alternatives; validate and release 3D-printable files (STEP/STL); wiring schematics for Pi 4 and Pi 5.
+- **Documentation:** step-by-step build guide; software quickstart; troubleshooting & calibration FAQ.
 
 ### Success criteria
-A community member can follow the build guide, assemble the hardware, run `install.sh`, and capture their first scan within 30 minutes of hardware assembly.
+A community member can follow the build guide, assemble the hardware, run `install.sh`, and capture their first scan within 30 minutes.
 
 ---
 
-## Priority Order & Execution Strategy
-
+## Priority Order
 ```
-Phase 0 (Foundation & CI)
-    ↓
-Phase 1 (Hardware & UART) ──→ Phase 2 (Data & Calibration)
-    ↓                              ↓
-Phase 4 (Web UI & Field Usability) ← Phase 3 (Unified CLI Pipeline)
-                                           ↓
-                                     Phase 5 (Multi-Scan & E57)
-                                           ↓
-                                     Phase 6 (Docs & Release)
+Phase 2 (open data + extrinsics)  →  Phase 3 (CLI pipeline)
+        ↓                                   ↓
+Phase 4 (web UI & field use)  ←─────────────┘
+        ↓
+Phase 5 (multi-scan, meshing, E57)
+        ↓
+Phase 6 (packaging, docs, release)
 ```
-
-1. **Phase 0 comes first:** Never refactor hardware drivers without automated tests and mock fixtures in place, otherwise desktop contributors cannot assist.
-2. **Phase 1 & Phase 2 establish the baseline:** Acquisition reliability and geometry correctness are the core physics of the system.
-3. **Phase 3 consolidates the software:** Eliminates script fragmentation and locks the public CLI contract.
-4. **Phase 4 enables real-world testing:** Makes field testing fast, pleasant, and independent of desktop computers.
-5. **Phase 5 & 6 provide professional Polish:** Delivers multi-room scanning, standard BIM/E57 exports, and complete community documentation.
-
----
 
 ## Definition of Done (v1.0 Release)
-The project will be considered ready for a milestone `v1.0` release when:
-- [ ] Automated test suite runs and passes in GitHub Actions CI.
-- [ ] Scan acquisition is verified zero-drop at 921,600 baud on Raspberry Pi OS Bookworm.
-- [ ] Scan data is stored in open, versioned formats (no pickled objects).
-- [ ] Calibration procedures for camera, LiDAR extrinsics, and stepper angles are documented and repeatable.
+- [ ] Automated test suite runs and passes in GitHub Actions CI. *(CI exists; keep it green)*
+- [ ] Scan acquisition verified zero-drop at 921,600 baud on Raspberry Pi OS Bookworm. *(done on STL27L)*
+- [ ] Scan data stored in open, versioned formats (no pickled objects).
+- [ ] Calibration procedures for camera, LiDAR extrinsics, and stepper angles documented and repeatable.
 - [ ] A single CLI command executes the full pipeline from raw capture to colorized point cloud.
-- [ ] The scanner can be triggered wirelessly via the local Web UI over a mobile device.
-- [ ] Multi-scan registration successfully merges multiple rooms into a single cohesive scene.
-- [ ] Point clouds export cleanly to industry-standard PLY and ASTM E57 formats.
-- [ ] Full bill of materials, 3D print models, and wiring diagrams are published and validated.
+- [ ] Scanner can be triggered wirelessly via the local Web UI over a mobile device.
+- [ ] Multi-scan registration merges multiple rooms into a single cohesive scene.
+- [ ] Point clouds export cleanly to industry-standard PLY and ASTM E57.
+- [ ] Full BOM, 3D print models, and wiring diagrams published and validated.

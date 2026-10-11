@@ -1,0 +1,20 @@
+{
+  "scan_id": "synthetic",
+  "device_id": "STL27L",
+  "sensor": "synthetic",
+  "hardware": "mock",
+  "location": "test",
+  "author": "pilidar-ci",
+  "format": "pilidar-raw",
+  "version": 1,
+  "arrays": {
+    "z_angles": "float64 [n_planes]",
+    "cartesian": "float64 [n_points, cols+1]  (col 0 = plane index)",
+    "quaternions": "int16 [n_planes, 4] wxyz (optional)"
+  },
+  "n_planes": 4,
+  "n_points": 48,
+  "angle_min_deg": 0.0,
+  "angle_max_deg": 270.0,
+  "has_quaternions": false
+}

@@ -3,6 +3,7 @@ import open3d as o3d
 import pye57
 import copy
 import cv2
+import json
 import matplotlib
 import threading
 import os
@@ -37,11 +38,111 @@ def get_scan_dict(z_angles, angular_list=None, cartesian_list=None, scan_id=None
     return raw_scan
 
 def save_raw_scan(path, data):
-    if isinstance(data, dict):
-        with open(path, "wb") as f:
-            pickle.dump(data, f)
+    """Persist a raw scan as an **open** container next to ``path``.
+
+    Writes ``<stem>.npz`` (arrays) + ``<stem>.json`` (metadata) — replacing the
+    Python-locked pickle. The ``path`` argument may be the legacy ``*.pkl`` name
+    (``config.raw_path``) or any path; the extension is replaced by ``.npz`` so
+    the on-disk schema is always ``<scan_id>_lidar.npz`` + ``.json``. The original
+    ``.pkl`` (if present) is left for backward compatibility.
+    """
+    if not isinstance(data, dict):
+        return
+    base = os.path.splitext(path)[0]
+
+    cartesian = data.get("cartesian") or []
+    quats = data.get("quaternions")
+    arrays = {
+        "z_angles": np.asarray(data.get("z_angles") or [], dtype=float),
+        "cartesian": np.asarray(_stack_cartesian(cartesian)),
+    }
+    if data.get("angular") is not None:
+        arrays["angular"] = np.asarray(data["angular"])
+    if quats is not None:
+        arrays["quaternions"] = np.asarray(quats)
+
+    np.savez_compressed(base + ".npz", **arrays)
+    _write_metadata(base + ".json", data, cartesian)
+
+
+def _stack_cartesian(cartesian):
+    """Stack the per-plane 2D fans into one ``(n_points, n_cols + 1)`` array.
+
+    Each fan's points live in columns 1..n (column 0 is the slice index), so the
+    per-plane point counts are recoverable and the ragged list is lossless as a
+    single rectangular float array.
+    """
+    rows = []
+    for i, fan in enumerate(cartesian):
+        fan = np.asarray(fan, dtype=float)
+        if fan.size == 0:
+            continue
+        rows.append(np.column_stack([np.full(len(fan), i, dtype=float), fan]))
+    if not rows:
+        return np.empty((0, 1))
+    return np.vstack(rows)
+
+
+def _unstack_cartesian(arr):
+    """Inverse of :func:`_stack_cartesian` -> list of per-plane 2D fans."""
+    arr = np.asarray(arr)
+    if arr.size == 0:
+        return []
+    idx = arr[:, 0].astype(int)
+    return [arr[idx == i, 1:] for i in range(idx.max() + 1)]
+
+
+def _write_metadata(path, data, cartesian):
+    meta = dict(data.get("header") or {})
+    meta["format"] = "pilidar-raw"
+    meta["version"] = 1
+    meta["arrays"] = {
+        "z_angles": "float64 [n_planes]",
+        "cartesian": "float64 [n_points, cols+1]  (col 0 = plane index)",
+        "quaternions": "int16 [n_planes, 4] wxyz (optional)",
+    }
+    meta["n_planes"] = len(cartesian)
+    meta["n_points"] = int(sum(len(np.asarray(c)) for c in cartesian))
+    if "z_angles" in data and data["z_angles"] is not None and len(data["z_angles"]):
+        za = np.asarray(data["z_angles"], dtype=float)
+        meta["angle_min_deg"] = float(za.min())
+        meta["angle_max_deg"] = float(za.max())
+    meta["has_quaternions"] = data.get("quaternions") is not None
+    with open(path, "w") as f:
+        json.dump(meta, f, indent=2, default=str)
+
 
 def load_raw_scan(path):
+    """Load a raw scan saved by :func:`save_raw_scan` (open NPZ) or legacy pickle.
+
+    Prefers the open container (``<stem>.npz`` + ``.json``); falls back to the
+    ``.pkl`` so existing scans keep loading.
+    """
+    base = os.path.splitext(path)[0]
+    npz_path = base + ".npz"
+    if os.path.exists(npz_path):
+        with np.load(npz_path, allow_pickle=False) as npz:
+            arrays = {k: npz[k] for k in npz.files}
+        header = {}
+        json_path = base + ".json"
+        if os.path.exists(json_path):
+            try:
+                with open(json_path) as f:
+                    meta = json.load(f)
+                header = {k: v for k, v in meta.items() if k not in ("arrays",)}
+            except (OSError, ValueError):
+                header = {}
+        raw_scan = {
+            "header": header,
+            "z_angles": arrays.get("z_angles", np.empty(0)).tolist(),
+            "angular": arrays.get("angular"),
+            "cartesian": _unstack_cartesian(arrays["cartesian"]) if "cartesian" in arrays else [],
+        }
+        if "quaternions" in arrays:
+            raw_scan["quaternions"] = arrays["quaternions"]
+        return raw_scan
+
+    # legacy pickle
     with open(path, "rb") as f:
         raw_scan = pickle.load(f)
     return raw_scan
@@ -101,9 +202,10 @@ def process_raw(config, save=True):
 
         return pcd
 
-    # load raw data dict from pickle file
+    # load raw data dict from pickle file (or the open NPZ container)
     imu_up = None
-    if os.path.exists(config.raw_path):
+    raw_base = os.path.splitext(config.raw_path)[0]
+    if os.path.exists(raw_base + ".npz") or os.path.exists(config.raw_path):
         # print("lidar.pkl file found:", config.raw_path)
         raw_scan = load_raw_scan(config.raw_path)
 

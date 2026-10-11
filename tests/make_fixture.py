@@ -13,6 +13,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from lib.pointcloud import save_raw_scan  # noqa: E402
 from tests.mock_hardware import build_packet, make_stream  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -55,6 +56,9 @@ def main():
     pkl_path = os.path.join(FIXTURES, "synthetic_lidar.pkl")
     with open(pkl_path, "wb") as f:
         pickle.dump(raw_scan, f)
+
+    # Open container (NPZ + JSON) — the current on-disk format.
+    save_raw_scan(pkl_path, raw_scan)
 
     # Matching slice directory (plane_<angle>.npy) for the dir-loading path.
     lidar_dir = os.path.join(FIXTURES, "lidar")
