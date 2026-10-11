@@ -3,6 +3,25 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-10-11
+
+### Added
+- **High-speed serial driver (`lib/lidar_driver.py`):** Replaced byte-by-byte `read()` with buffered block reads (4 KB chunks) and a sliding-window frame parser with automated sync-byte recovery, CRC8 validation, and malformed-packet counting/logging. Added a dedicated background reader thread feeding a bounded thread-safe queue (`LIDAR.<DEVICE>.QUEUE_SIZE`, default 1024) to decouple serial I/O from processing; `read_loop()` now consumes from the queue via `read_from_queue()`.
+- **`pymeshlab>=2025.7` dependency:** headless meshing (Poisson surface reconstruction, UV projection / texture baking, Hausdorff cleanup) now runs through the pymeshlab Python API in the project venv — wheels exist for both x86_64 and aarch64, so the same `~/venv` works on the dev PC and the Pi. Requires the Mesa OpenGL runtime (`sudo apt-get install -y libopengl0 libgl1 libegl1`).
+
+### Changed
+- **Dependency stack updated to current releases (`pyproject.toml`, `requirements.txt`):** `numpy>=2.0`, `opencv-python>=5.0`, `open3d>=0.20`, `scipy>=1.15`, `matplotlib>=3.10`, `plotly>=6.0`.
+- **`jupyter` moved to the `dev` optional-dependency group** — it is only needed for development/visualization, not for production scans.
+- **Pi environment standardised on `venv`:** the Pi now uses a plain `python3 -m venv ~/venv` (system Python 3.11 on Bookworm, matching the OS picamera2/libcamera stack) instead of a miniforge3 conda env, matching the desktop dev setup. The system `picamera2`/`libcamera` bridge is provided by a `.pth` file pointing at `/usr/lib/python3/dist-packages` (replaces the old `PYTHONPATH=` prefix).
+- **`gpio_interrupt.py` rewritten on the `lgpio` C-API:** replaced deprecated `RPi.GPIO` and the 0.2 s polling loop with `gpiochip_open()` + `gpio_claim_alert()` (falling edge, internal pull-up) + `gpio_set_debounce_micros()` + a callback thread; the main thread now just sleeps — idle CPU drops from ~2% to ~0%. Scan launches now use `~/venv/bin/python` instead of conda.
+- **`pi-hardware` GPIO dependency corrected to `lgpio>=0.2.2`** (the C-API module) — the previously listed `rpi-lgpio` is only an RPi.GPIO compatibility shim and does not provide the edge-detection API used by `gpio_interrupt.py`.
+- **Pi venv: `simplejpeg` installed in-venv** — the system `simplejpeg` (built against numpy 1.x) is binary-incompatible with numpy 2, so a numpy-2 build is installed into `~/venv` to shadow it for `picamera2`.
+- **Documentation restructured into `docs/`:** `ROADMAP.md` moved to `docs/roadmap.md`; new `docs/setup.md` (Python venv, GPIO/UART/PWM, Hugin, MeshLab, USB power), `docs/hardware.md`, `docs/protocol.md`, `docs/troubleshooting.md`, and `docs/references.md` (references split out of troubleshooting). `README.md` rewritten as a concise overview with a Quickstart and a documentation index table. The scan-button systemd service now uses the venv interpreter.
+
+### Removed
+- **miniforge3/conda on the Pi:** no longer needed — the plain venv covers all dependencies.
+- **Standalone MeshLab installs (flatpak GUI on the dev PC, upstream 2025.07 archive on the Pi, apt `meshlab` 2020.09):** superseded by `pymeshlab` in the venv. The `meshlab/meshlabserver_test.sh` + `.mlx` workflow is kept for reference only.
+
 ## [2.4.0] - 2026-10-11
 
 ### Added

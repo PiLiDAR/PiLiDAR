@@ -5,7 +5,7 @@ from lib.config import Config
 
 
 config = Config()
-config.init(scan_id="240824-1230")
+config.init(scan_id="240827-1322")
 
 
 pcd = o3d.io.read_point_cloud(config.pcd_path)

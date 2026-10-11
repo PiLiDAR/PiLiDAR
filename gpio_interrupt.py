@@ -1,20 +1,34 @@
+'''
+GPIO button interrupt: starts a scan when the button is pressed.
+
+Uses the lgpio C-API (``pip install lgpio``) instead of the deprecated
+RPi.GPIO. The button edge is handled by an lgpio callback thread, so the
+main thread just sleeps — no polling loop — and idle CPU usage is ~0%.
+'''
+
 import subprocess
 import time
 
-# import os
-# os.environ['LG_WD'] = '/tmp'  # export LG_WD=/tmp  # set LGPIO tmp directory
+import lgpio
 
-import RPi.GPIO as GPIO  # type: ignore
+# # ENABLE USB POWER
+# subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "on"])
+
+START_PIN   = 17
+VENV_PYTHON = "/home/pi/venv/bin/python"
+MAIN_SCRIPT = "/home/pi/PiLiDAR/PiLiDAR.py"
+
+# # DISABLE USB POWER
+# subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "off"])
+
+process = None
 
 
-# Define the callback function that runs when the button is pressed
-def start_callback(channel):
-    
-    # # ENABLE USB POWER
-    # subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "on"])
-    
-    # Check if there is an existing process
+def start_callback(chip, gpio, level, tick):
+    """Runs in the lgpio callback thread on a falling edge (button press)."""
     global process
+
+    # Check if there is an existing process
     if process is not None:
         return_code = process.poll()
         # If the return code is None, the process is still running
@@ -23,39 +37,34 @@ def start_callback(channel):
             return
         else:
             print("Process has finished, return code:", return_code)
-            
-    # Start a new process with the main script with higher priority
+
+    # Start a new process with the main script at higher priority
     nice_value = -10
-    call = ["nice", "-n", str(nice_value), "python3", MAIN_SCRIPT] if CONDA_ENV is None else ["nice", "-n", str(nice_value), CONDA_PATH, "run", "-n", CONDA_ENV, "python", MAIN_SCRIPT]
-    process = subprocess.Popen(call)
+    process = subprocess.Popen(["nice", "-n", str(nice_value), VENV_PYTHON, MAIN_SCRIPT])
     print("Started a new process, pid:", process.pid)
 
 
-START_PIN = 17
+# Open gpiochip 0 and claim the button pin for falling-edge alerts with an
+# internal pull-up (the button grounds the pin on press).
+handle = lgpio.gpiochip_open(0)
+if handle < 0:
+    raise SystemExit(f"could not open gpiochip 0 ({lgpio.error_text(handle)})")
 
-CONDA_PATH  = "/home/pi/miniforge3/condabin/conda"
-CONDA_ENV   = "py311"
-MAIN_SCRIPT = "/home/pi/PiLiDAR/PiLiDAR.py"
+err = lgpio.gpio_claim_alert(handle, START_PIN, lgpio.FALLING_EDGE, lgpio.SET_PULL_UP)
+if err < 0:
+    raise SystemExit(f"could not claim GPIO {START_PIN} ({lgpio.error_text(err)})")
 
+# 200 ms debounce for the mechanical switch (microseconds).
+lgpio.gpio_set_debounce_micros(handle, START_PIN, 200_000)
 
-# # DISABLE USB POWER
-# subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "off"])
+cb = lgpio.callback(handle, START_PIN, lgpio.FALLING_EDGE, start_callback)
 
-
-# Set up the GPIO mode, pin direction and event detection
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(START_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-GPIO.add_event_detect(START_PIN, GPIO.FALLING, callback=start_callback, bouncetime=200)
-
-
-# Initialize the process variable
-process = None
-
-# Keep the main thread running
+# Block in the main thread — the callback does the work, ~0% CPU while idle.
 try:
     print("Waiting for button press...")
     while True:
-        time.sleep(0.2)
-        
+        time.sleep(1)
 except KeyboardInterrupt:
-    GPIO.cleanup()
+    cb.cancel()
+    lgpio.gpio_free(handle, START_PIN)
+    lgpio.gpiochip_close(handle)

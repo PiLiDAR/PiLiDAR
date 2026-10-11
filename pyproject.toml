@@ -4,31 +4,32 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pilidar"
-version = "2.4.0"
+version = "2.5.0"
 description = "Open-source, low-cost DIY 360° LiDAR scanner and panoramic 3D reconstruction system"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
-    "numpy",
-    "matplotlib>=3.9.2",
-    "plotly>5.24.0",
+    "numpy>=2.0",
+    "matplotlib>=3.10",
+    "plotly>=6.0",
     "pyserial>=3.5",
-    "scipy>=1.12.0",
-    "open3d>=0.18.0",
-    "opencv-python>=4.10",
+    "scipy>=1.15",
+    "open3d>=0.20",
+    "opencv-python>=5.0",
     "pye57>=0.4.12",
-    "jupyter",
+    "pymeshlab>=2025.7",
     "quat>=1.0.0",
     "mpu6050>=0.0.3",
 ]
 
 [project.optional-dependencies]
 pi-hardware = [
-    "rpi-lgpio>=0.6",
+    "lgpio>=0.2.2",
     # picamera2 ships with Raspberry Pi OS (libcamera); not pip-installable
 ]
 dev = [
+    "jupyter",  # development & visualization only, not needed for production scans
     "pytest>=7.0",
     "ruff>=0.4.0",
 ]

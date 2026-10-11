@@ -20,6 +20,7 @@
             "BAUDRATE": 921600,
             "SAMPLING_RATE": 21600,
             "OUT_LEN": 180,
+            "QUEUE_SIZE": 1024,
             "OFFSET": 0,
             "PWM_COEFFS": null
         },
@@ -29,6 +30,7 @@
             "BAUDRATE": 230400,
             "SAMPLING_RATE": 4500,
             "OUT_LEN": 40,
+            "QUEUE_SIZE": 1024,
             "OFFSET": 0,
             "PWM_COEFFS": [33.3174, -0.8497]
         },

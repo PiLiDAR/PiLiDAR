@@ -1,21 +1,25 @@
-numpy
-matplotlib>=3.9.2
-plotly>5.24.0
+numpy>=2.0
+matplotlib>=3.10
+plotly>=6.0
 pyserial>=3.5
-scipy>=1.12.0
-open3d>=0.18.0  # or open3d-cpu
-opencv-python>=4.10  # or opencv-headless-python
+scipy>=1.15
+open3d>=0.20  # or open3d-cpu
+opencv-python>=5.0  # or opencv-headless-python
 pye57>=0.4.12
-jupyter
+pymeshlab>=2025.7  # headless meshing (Poisson, UV/texture); needs system libopengl0
 
 quat>=1.0.0
 mpu6050>=0.0.3
 
-rpi-lgpio>=0.6
+# development & visualization only (not required for production scans):
+# jupyter
+
+lgpio>=0.2.2
 #rpi-hardware-pwm>=0.2.2
 # picamera2: Pi-only, ships with the Raspberry Pi OS camera stack (libcamera).
 # Not pip-installable (needs the system libcamera bindings); PiLiDAR runs on the Pi.
-# Non-Python dependencies (install separately; see README setup guide):
+# Non-Python dependencies (install separately; see docs/setup.md):
 # Debian/Ubuntu CLI stitching: flatpak, hugin-tools, enblend.
 # Hugin GUI: 2025.0.1 via Flathub (x86_64 and aarch64).
-# MeshLab: 2025.07 via Flathub (x86_64) or upstream ARM64 archive on the Pi.
+# Meshing: pymeshlab (above) needs the Mesa OpenGL runtime:
+#   sudo apt-get install -y libopengl0 libgl1 libegl1

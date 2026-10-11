@@ -1,13 +1,13 @@
 '''
 https://pymeshlab.readthedocs.io/en/latest/
 
-pip install pymeshlab
+pip install pymeshlab   # wheels for x86_64 and aarch64 (manylinux_2_35)
 
+Requires the Mesa OpenGL runtime (plugins link against libOpenGL):
+    sudo apt-get install -y libopengl0 libgl1 libegl1
 
-no ARM build available!
-for Raspberry Pi you can try to build from source:
-git pull https://github.com/cnr-isti-vclab/PyMeshLab.git
-bash PyMeshLab/scripts/Linux/0_setup_env.sh  1_build.sh  2_deploy.sh  make_wheel.sh
+Run with the project venv:
+    ~/venv/bin/python meshlab/pymeshlab_test.py
 '''
 
 import pymeshlab
@@ -27,7 +27,7 @@ print("loading project file")
 ms.load_project('meshlab/box/box.mlp')
 ms.load_new_mesh('meshlab/pointcloud.ply')
 
-# Simplify the point cloud, apply normal smoothing and create Poisson Surface mesh 
+# Simplify the point cloud, apply normal smoothing and create Poisson Surface mesh
 if compute_poisson:
     print("simplifying..")
     ms.generate_simplified_point_cloud(samplenum = 10000000)
@@ -63,7 +63,7 @@ if hausdorff_color:
 
 # 3. Select faces by scalar value range with close distancee to the pointcloud
 if legacy:
-    ms.apply_filter('select_by_vertex_quality', maxq = 0.05, inclusive = True) 
+    ms.apply_filter('select_by_vertex_quality', maxq = 0.05, inclusive = True)
 else:
     ms.compute_selection_by_scalar_per_vertex(maxq = 0.05, inclusive = True)
 
@@ -104,32 +104,32 @@ ms.save_current_mesh('meshlab/meshed.ply')
 if project_texture:
     import os
     import subprocess
-    
+
     # Start Xvfb
     xvfb_process = subprocess.Popen(['Xvfb', ':99', '-screen', '0', '1024x768x24'])
 
     os.environ['QT_QPA_PLATFORM'] = 'offscreen'
     os.environ['LIBGL_ALWAYS_SOFTWARE'] = '1'
     os.environ['DISPLAY'] = ':99'
-    
+
     pymeshlab.use_cpu_opengl()
 
     print("projecting UV coordinates and baking texture")
     if legacy:
-        ms.apply_filter('parameterization__texturing_from_registered_rasters', texturesize = 8192, 
-                                                                                texturename = 'texture.jpg', 
-                                                                                colorcorrection = False, 
-                                                                                usedistanceweight = False, 
-                                                                                useimgborderweight = False, 
-                                                                                cleanisolatedtriangles = True, 
+        ms.apply_filter('parameterization__texturing_from_registered_rasters', texturesize = 8192,
+                                                                                texturename = 'texture.jpg',
+                                                                                colorcorrection = False,
+                                                                                usedistanceweight = False,
+                                                                                useimgborderweight = False,
+                                                                                cleanisolatedtriangles = True,
                                                                                 texturegutter = 2)
     else:
-        ms.compute_texcoord_parametrization_and_texture_from_registered_rasters(texturesize = 8192, 
-                                                                                texturename = 'texture.jpg', 
-                                                                                colorcorrection = False, 
-                                                                                usedistanceweight = False, 
-                                                                                useimgborderweight = False, 
-                                                                                cleanisolatedtriangles = True, 
+        ms.compute_texcoord_parametrization_and_texture_from_registered_rasters(texturesize = 8192,
+                                                                                texturename = 'texture.jpg',
+                                                                                colorcorrection = False,
+                                                                                usedistanceweight = False,
+                                                                                useimgborderweight = False,
+                                                                                cleanisolatedtriangles = True,
                                                                                 texturegutter = 2)
 
     ms.save_current_mesh('meshlab/textured.ply')

@@ -3,6 +3,8 @@
 .ipynb_checkpoints
 __pycache__
 Thumbs.db
+.pytest_cache
+.ruff_cache
 
 # box-pano for UV mapping
 meshlab/tmp/*

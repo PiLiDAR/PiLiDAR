@@ -10,8 +10,14 @@ Speed Control on Raspberry Pi
 - curve fitting using scipy.optimize.curve_fit
 '''
 
+import logging
+import queue
+import threading
+
 import numpy as np
 import serial
+
+logger = logging.getLogger(__name__)
 
 # running from project root
 try:
@@ -56,6 +62,14 @@ class Lidar:
 
         self.byte_array         = bytearray()
         self.dtype              = np.float32
+
+        # background reader thread + bounded queue (decouples serial I/O from processing)
+        self.queue_size         = config.get("LIDAR", config.DEVICE, "QUEUE_SIZE")
+        self.packet_queue       = queue.Queue(maxsize=self.queue_size)
+        self.reader_thread      = None
+        self._stop_event        = threading.Event()
+        self.dropped_packets    = 0
+        self.malformed_packets  = 0
 
         self.out_len            = config.get("LIDAR", config.DEVICE, "OUT_LEN")
 
@@ -122,6 +136,8 @@ class Lidar:
 
 
     def close(self):
+        self.stop_reader()
+
         if self.pwm is not None:
             self.pwm.stop()
             print("PWM stopped.\n")
@@ -134,7 +150,106 @@ class Lidar:
         print("Serial connection closed.\n")
 
 
+    # ------------------------------------------------------------------
+    # background reader thread: decouples serial I/O from processing
+    # ------------------------------------------------------------------
+
+    def start_reader(self):
+        """Start the background reader thread that fills ``packet_queue``."""
+        if self.reader_thread is not None and self.reader_thread.is_alive():
+            return
+        self._stop_event.clear()
+        self.reader_thread = threading.Thread(target=self._reader_loop, name="lidar-reader", daemon=True)
+        self.reader_thread.start()
+
+
+    def stop_reader(self):
+        """Signal the reader thread to stop and wait for it to exit."""
+        self._stop_event.set()
+        if self.reader_thread is not None:
+            self.reader_thread.join(timeout=2.0)
+            self.reader_thread = None
+
+
+    def _reader_loop(self):
+        """Dedicated serial I/O loop: block reads -> sliding-window parse -> queue."""
+        while not self._stop_event.is_set() and self.serial_connection.is_open:
+            try:
+                chunk = self.serial_connection.read(4096)
+            except serial.SerialException:
+                logger.exception("Serial error in reader thread")
+                break
+            if not chunk:
+                continue
+            self.byte_array.extend(chunk)
+            while True:
+                pkt = self._extract_packet()
+                if pkt is None:
+                    break
+                try:
+                    self.packet_queue.put_nowait(pkt)
+                except queue.Full:
+                    self.dropped_packets += 1
+                    logger.warning("Packet queue full; %d packets dropped total", self.dropped_packets)
+
+
+    # ------------------------------------------------------------------
+    # sliding-window frame parser over the raw byte buffer
+    # ------------------------------------------------------------------
+
+    def _extract_packet(self):
+        """Find and validate one 47-byte packet in ``byte_array``.
+
+        Scans for the start/dlength header, verifies the CRC8, and removes
+        the packet from the buffer. Returns the packet bytes, or None if no
+        valid packet is currently buffered. False starts and corrupt packets
+        are skipped one byte at a time (automated sync-byte recovery).
+        """
+        buf = self.byte_array
+        n = len(buf)
+        i = 0
+        while i + self.package_len <= n:
+            if buf[i] == self.start_byte[0] and buf[i + 1] == self.dlength_byte[0]:
+                candidate = bytes(buf[i:i + self.package_len])
+                if self.check_CRC8(candidate):
+                    del buf[:i + self.package_len]
+                    return candidate
+                # header matched but CRC failed: corrupt packet or false start
+                self.malformed_packets += 1
+                if self.verbose:
+                    print("[WARNING] Malformed packet at buffer offset", i)
+            i += 1
+
+        # bound buffer growth: keep only from the last potential start byte
+        if n > 4 * self.package_len:
+            last = buf.rfind(self.start_byte[0])
+            del buf[:max(last, 0)]
+        return None
+
+
+    def _read_packet_direct(self):
+        """Blocking read of one valid packet straight from the serial connection.
+
+        Used when the background reader thread is not running (e.g. tests,
+        replay). Returns the packet bytes, or None if the stream is exhausted.
+        """
+        while self.serial_connection.is_open:
+            pkt = self._extract_packet()
+            if pkt is not None:
+                return pkt
+            chunk = self.serial_connection.read(max(1, self.package_len - len(self.byte_array)))
+            if not chunk:
+                return None
+            self.byte_array.extend(chunk)
+        return None
+
+
     def read_loop(self, callback=None, max_packages=None, digits=4):
+        """Consume packets from the background reader until the sweep is done.
+
+        Serial I/O happens in a dedicated reader thread (``start_reader``);
+        this loop only decodes queued packets and fills the output arrays.
+        """
         loop_count = 0
         if self.visualization is not None:
             # matplotlib close event
@@ -144,8 +259,9 @@ class Lidar:
 
             self.visualization.fig.canvas.mpl_connect('close_event', on_close)
 
-        while self.serial_connection.is_open and (max_packages is None or loop_count <= max_packages):
-            try:
+        self.start_reader()
+        try:
+            while self.serial_connection.is_open and (max_packages is None or loop_count <= max_packages):
                 if self.out_i == self.out_len:
                     if callback is not None:
                         callback()
@@ -167,54 +283,26 @@ class Lidar:
 
                     self.out_i = 0
 
-                success = self.read()
+                success = self.read_from_queue(timeout=1.0)
                 if success:
                     self.out_i += 1
                     loop_count += 1
-
-            except serial.SerialException:
-                print("SerialException")
-                break
+        finally:
+            self.stop_reader()
 
 
     def read(self):
-        # iterate through serial stream until start package is found
-        while self.serial_connection.is_open:
-            data_byte = self.serial_connection.read()
-            if not data_byte:
-                return False
+        """Read one valid packet and write its points into the output arrays.
 
-            while data_byte == self.start_byte:
-                next_byte = self.serial_connection.read()
-                if not next_byte:
-                    return False
-                if next_byte == self.dlength_byte:
-                    self.byte_array = self.serial_connection.read(self.package_len - 2)
-                    self.byte_array = self.start_byte + self.dlength_byte + self.byte_array
-                    break
-                # if next_byte is itself a start_byte, re-evaluate without discarding
-                data_byte = next_byte
-
-            if self.byte_array:
-                break
-
-        # Error handling
-        if len(self.byte_array) != self.package_len:
-            if self.verbose:
-                print("[WARNING] Incomplete package:", self.byte_array)
-            self.byte_array = bytearray()
-            return False
-
-        # Check if the package is valid using check_CRC8
-        if not self.check_CRC8(self.byte_array):
-            if self.verbose:
-                print("[WARNING] Invalid package:", self.byte_array)
-            # If the package is not valid, reset byte_array and continue with the next iteration
-            self.byte_array = bytearray()
+        Returns True if a packet was decoded, False if the stream is exhausted
+        (no more data available).
+        """
+        pkt = self._read_packet_direct()
+        if pkt is None:
             return False
 
         # decoding updates speed, timestamp, angle_package, distance_package, luminance_package
-        self.decode(self.byte_array)
+        self.decode(pkt)
         # convert polar to cartesian
         x_package, y_package = self.polar2cartesian(self.angle_package, self.distance_package, self.offset)
         points_package = np.column_stack((x_package, y_package, self.luminance_package)).astype(self.dtype)
@@ -224,8 +312,25 @@ class Lidar:
         self.timestamps[self.out_i] = self.timestamp
         self.points_2d[self.out_i*self.dlength:(self.out_i+1)*self.dlength] = points_package
 
-        # reset byte_array
-        self.byte_array = bytearray()
+        return True
+
+
+    def read_from_queue(self, timeout=None):
+        """Decode one packet from the background reader's queue.
+
+        Returns True if a packet was decoded, False on timeout (no packet
+        available within ``timeout`` seconds; None blocks indefinitely).
+        """
+        try:
+            pkt = self.packet_queue.get(timeout=timeout)
+        except queue.Empty:
+            return False
+        self.decode(pkt)
+        x_package, y_package = self.polar2cartesian(self.angle_package, self.distance_package, self.offset)
+        points_package = np.column_stack((x_package, y_package, self.luminance_package)).astype(self.dtype)
+        self.speeds[self.out_i] = self.speed
+        self.timestamps[self.out_i] = self.timestamp
+        self.points_2d[self.out_i*self.dlength:(self.out_i+1)*self.dlength] = points_package
         return True
 
 

@@ -5,7 +5,7 @@ from lib.config import Config
 
 if __name__ == '__main__':
 
-    scan_id = "240827-1322"  # "240824-1230"
+    scan_id = "240827-1322"
 
     config = Config()
     config.init(scan_id=scan_id)

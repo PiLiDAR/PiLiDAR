@@ -4,8 +4,7 @@ exposures and reports mean brightness. If manual exposure works, brightness
 should scale with exposure time (until clipping).
 
 Run on the Pi:
-  PYTHONPATH=/usr/lib/python3/dist-packages \
-    ~/miniforge3/envs/py311/bin/python experiments/test_picam2_exposure.py
+  ~/venv/bin/python experiments/test_picam2_exposure.py
 """
 import os
 import sys

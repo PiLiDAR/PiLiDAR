@@ -33,6 +33,8 @@ def lidar():
     lidar.offset = 0.0
     lidar.crc_table = list(CRC_TABLE)
     lidar.byte_array = bytearray()
+    lidar.dropped_packets = 0
+    lidar.malformed_packets = 0
     lidar.dtype = np.float32
     lidar.out_i = 0
     lidar.out_len = 10
