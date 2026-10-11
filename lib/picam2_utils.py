@@ -6,15 +6,21 @@ Drives the IMX477 through a single persistent Picamera2 session:
     1. configure the still stream and start the camera
     2. let the 3A (AE/AWB) pipeline settle over a few frames
     3. read the converged ExposureTime / AnalogueGain / ColourGains from
-       capture_metadata()
-    4. lock 3A (AeEnable=False, AwbEnable=False) and drive the sensor manually
-       for the HDR bracket
+       capture_metadata() and lock 3A (AeEnable=False, AwbEnable=False)
+    4. drive the sensor manually for the HDR bracket
 
-HDR bracketing is **shutter-only** at constant gain: the rig is stationary while
-shooting the panorama, so every frame is a long exposure and there is no motion
-blur to trade against — bracketing by shutter keeps the ISO (hence noise) low.
-The gain is chosen as low as possible (ISO 100 preferred, ISO 200 cap) with the
-brightness otherwise coming from exposure time.
+Exposure model
+--------------
+The auto-exposure solves for a scene **illumination value** (``exposure × gain``).
+``estimate_parameters()`` reads it from the auto frame and ``ev_transform()`` turns
+it back into a manual ``(ISO, shutter)``. The HDR bracket scales that illumination
+by ``2**step`` around the base.
+
+Gain (= ISO) is **fixed per bracket pass**: ISO 100 (``CAM.gain_low``) for the
+neutral and dark steps (≤ 0), ISO 200 (``CAM.gain_high``) for the bright steps
+(> 0) — so ISO stays low (low noise) while the bracket covers the dynamic range.
+The rig is stationary while shooting the panorama, so long exposures are fine and
+brightness comes from shutter time; there is no exposure ceiling.
 
 Units
 -----

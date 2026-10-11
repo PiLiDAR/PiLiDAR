@@ -3,6 +3,20 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.8] - 2026-10-11
+
+### Fixed
+- **HDR camera regression (the exposure calibration was inverted since the `rpicam‑still` → Picamera2 rewrite):** the old code derived `exposure = auto_exposure × auto_gain / set_gain`; the rewrite had the ratio **flipped**, so manual photos came out nearly black and the bracket collapsed. Now re-expressed around a scene **illumination value** (`illumination = exposure × gain`) with a clean transform back to `(ISO, shutter)`.
+
+### Changed
+- **EV-based exposure model (`lib/picam2_utils.py`):** `illumination()`, `ev_transform()` and `bracket_exposures()` replace the ad-hoc gain helpers. `estimate_parameters()` returns the measured illumination; `take_hdr()` builds the bracket `[-AEB·stops … +AEB·stops]` from it.
+- **Fixed gain per bracket pass, ISO from config:** `CAM.gain_low` (ISO 100) for steps ≤ 0 and `CAM.gain_high` (ISO 200) for steps > 0 — so dark steps lengthen shutter, bright steps raise gain, and ISO never exceeds 200. `CAM.max_exposure`, `base_gain` and `max_gain` removed (obsolete).
+- **`CAM.preview_dims` → `CAM.calibration_dims`** (it is now only the 3A calibration resolution), and the internal `configure(..., lores_dims=...)` parameter renamed to match.
+- **`_capture_at()` uses a proportional exposure tolerance** (no absolute 1 ms floor) and verifies both `ExposureTime` and `AnalogueGain`, so every saved frame genuinely carries the requested setting — the 1 ms floor was silently accepting the previous (brighter) frame for the sub-millisecond dark steps.
+
+### Verified
+- **On hardware (Pi + IMX477):** auto-exposed `ev` re-transformed gives ISO 100 @ 0.80 ms reproducing the auto frame (lum 130.7 vs 128.2); the −2…+2 bracket is monotonic and evenly spaced (28.8 / 83.6 / 130.8 / 182.1 / 223.3). Test script: `experiments/test_picam2_exposure.py` (writes to `/tmp/picam2_exp/`).
+
 ## [2.5.7] - 2026-10-11
 
 ### Changed
