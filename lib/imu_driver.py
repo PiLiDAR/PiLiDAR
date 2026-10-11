@@ -14,7 +14,7 @@ _NORM_TOL = 0.10               # accept +-10% of the unit norm
 
 
 class MPU6050Wrapper:
-    def __init__(self, i2c_bus=3, device_address=0x68, freq=50, retries=5, retry_delay=0.3):
+    def __init__(self, i2c_bus=3, device_address=0x68, freq=50, retries=10, retry_delay=0.25):
         self.i2c_bus = i2c_bus
         self.device_address = device_address
         self.freq_divider = int(200 / freq)  # 0x04
