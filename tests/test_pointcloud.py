@@ -70,6 +70,41 @@ def test_open_container_without_quaternions(tmp_path):
     assert len(loaded["cartesian"]) == 1
 
 
+def test_get_scan_dict_accepts_custom_header():
+    from lib.pointcloud import get_scan_dict
+    prov = {"scan_id": "abc", "software_version": "9.9.9"}
+    d = get_scan_dict([0.0, 90.0], cartesian_list=[np.zeros((1, 3))] * 2, header=prov)
+    assert d["header"]["scan_id"] == "abc"
+    assert d["header"]["software_version"] == "9.9.9"
+
+
+def test_scan_provenance_best_effort():
+    """Provenance fills the fields it can and never raises."""
+    from lib.file_utils import scan_provenance
+
+    class FakeConfig:
+        scan_id = "261012-0037"
+        target_res = 1 / 6
+        h_res = 0.1817
+
+        def get(self, *keys):
+            table = {
+                ("LIDAR", "DEVICE"): "STL27L",
+                ("LIDAR", "STL27L", "SAMPLING_RATE"): 21600,
+                ("STEPPER", "SCAN_ANGLE"): 180,
+                ("IMU", "LEVEL"): True,
+            }
+            return table[keys]
+
+    prov = scan_provenance(FakeConfig())
+    assert prov["scan_id"] == "261012-0037"
+    assert prov["device_id"] == "STL27L"
+    assert prov["software_version"]           # non-empty
+    assert prov["platform"] and prov["hardware"]
+    assert prov["config"]["sampling_rate"] == 21600
+    assert prov["config"]["imu_leveling"] is True
+
+
 def test_load_falls_back_to_legacy_pickle(tmp_path):
     """A plain .pkl with no sibling .npz still loads."""
     raw_scan = {"header": {}, "z_angles": [0.0, 90.0],

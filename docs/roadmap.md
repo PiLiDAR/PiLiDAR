@@ -56,12 +56,11 @@ Modern tooling (`pyproject.toml`), hardware mock harness (`MockLidarSerial`/`Moc
 **Objective:** Replace unversioned pickle storage with open, standardized file formats and establish rigorous calibration procedures.
 
 ### Remaining tasks
-- **Standardized scan container & metadata** — *open container ✅ done (v2.6.0)*
-  - ✅ Raw scans saved as `<id>_lidar.npz` + `<id>_lidar.json` (deprecates pickle writing; `load_raw_scan` falls back to legacy `.pkl`); `experiments/convert_scans.py` converts old scans.
+- **Standardized scan container & metadata** — *open container + provenance ✅ (v2.6.x)*
+  - ✅ Raw scans saved as `<id>_lidar.npz` + `<id>_lidar.json` (deprecates pickle writing; `load_raw_scan` falls back to legacy `.pkl`); `pilidar convert` / `experiments/convert_scans.py` convert old scans.
+  - ✅ Sidecar carries real provenance: scan id, UTC time, host, platform, hardware model, software version, LiDAR device, config snapshot (sampling/step res/scan angle/IMU leveling) + the array schema.
   - ✅ 3D outputs are already PLY with intensity.
   - ⬜ Move the raw *time-series* (range/angle packets) to a documented schema if needed.
-  - ⬜ Enrich the `metadata.json` sidecar with full device/software/config provenance (currently header fields are placeholders).
-  - ⬜ A standalone legacy-`.pkl` → open-format converter is provided as an experiment; promote into the CLI (`pilidar convert`) in Phase 3.
 - **LiDAR↔camera 6-DOF extrinsics calibration**
   - Formalize the rigid-body transform ($X, Y, Z, \text{roll}, \text{pitch}, \text{yaw}$) between the LiDAR optical center, the stepper rotation axis, and the camera sensor center.
   - Build a semi-automated calibration utility using a known physical fixture (corner target / planar board).

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import argparse
 
-VERSION = "2.6.2"
+from lib.version import __version__ as VERSION
 
 
 def build_parser():

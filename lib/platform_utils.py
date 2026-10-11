@@ -37,6 +37,27 @@ def get_platform():
     return platform
 
 
+def get_hardware_model():
+    """Best-effort hardware description for scan provenance.
+
+    On a Pi this is the device-tree model (e.g. "Raspberry Pi 4 Model B Rev 1.4");
+    elsewhere it falls back to the OS machine string. Never raises.
+    """
+    try:
+        for dt_path in ('/proc/device-tree/model', '/sys/firmware/devicetree/base/model'):
+            if os.path.exists(dt_path):
+                with open(dt_path, 'r', errors='ignore') as f:
+                    model = f.read().strip('\x00\n ').strip()
+                    if model:
+                        return model
+    except Exception:
+        pass
+    try:
+        return f"{sys.platform} {os.uname().machine}"
+    except Exception:
+        return sys.platform
+
+
 platform = get_platform()
 
 if platform in ['Windows', 'Mac', 'Linux', 'RaspberryPi']:

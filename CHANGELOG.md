@@ -3,6 +3,14 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.3] - 2026-10-12
+
+### Added
+- **Scan provenance in the raw-scan sidecar.** `get_scan_dict()` now accepts a `header`, and `PiLiDAR.py` fills it with `lib.file_utils.scan_provenance(config)`: scan id, `created_utc`, hostname (`author`), `platform`, `hardware` (device-tree model), `software_version`, `device_id`, and a config snapshot (`sampling_rate`, `scan_angle_deg`, `target_res_deg`, `h_res_deg`, `imu_leveling`). The header fields were previously all `null`.
+- **`lib/version.py`** — single source of truth for the software version, read from `version.txt`; the CLI and provenance both use it (no more hardcoded CLI version).
+- **`lib.platform_utils.get_hardware_model()`** — best-effort device-tree model string for provenance.
+- Tests for custom headers and provenance. Suite now 78 tests.
+
 ## [2.6.2] - 2026-10-12
 
 ### Fixed

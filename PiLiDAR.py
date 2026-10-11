@@ -8,6 +8,7 @@ from lib.a4988_driver import A4988
 from lib.imu_driver import MPU6050Wrapper
 from lib.config import Config, format_value
 from lib.pointcloud import process_raw, save_raw_scan, get_scan_dict
+from lib.file_utils import scan_provenance
 from lib.picam2_utils import Camera
 from lib.pano_utils import hugin_stitch, hugin_refine
 from lib.platform_utils import get_platform
@@ -142,8 +143,9 @@ try:
 
         stepper.move_to_angle(0)   # return to 0°
 
-        # Save raw_scan to pickle file
-        raw_scan = get_scan_dict(lidar.z_angles, cartesian_list=lidar.cartesian_list)
+        # Save raw_scan (metadata provenance + arrays) to the open container
+        raw_scan = get_scan_dict(lidar.z_angles, cartesian_list=lidar.cartesian_list,
+                                 header=scan_provenance(config))
 
         if enable_IMU:
             # inject IMU data into raw_scan dict

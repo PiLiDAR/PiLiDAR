@@ -19,9 +19,11 @@ except Exception:
         Orientation = None
 
 
-def get_scan_dict(z_angles, angular_list=None, cartesian_list=None, scan_id=None, device_id=None, sensor=None, hardware=None, location=None, author=None):
-    raw_scan = {
-        "header": {
+def get_scan_dict(z_angles, angular_list=None, cartesian_list=None,
+                  scan_id=None, device_id=None, sensor=None, hardware=None,
+                  location=None, author=None, header=None):
+    if header is None:
+        header = {
             # "creation_date": None,
             # "modification_date": None,
             "scan_id": scan_id,
@@ -30,7 +32,9 @@ def get_scan_dict(z_angles, angular_list=None, cartesian_list=None, scan_id=None
             "hardware": hardware,
             "location": location,
             "author": author,
-            },
+        }
+    raw_scan = {
+        "header": header,
         "z_angles": z_angles,
         "angular": angular_list,
         "cartesian": cartesian_list

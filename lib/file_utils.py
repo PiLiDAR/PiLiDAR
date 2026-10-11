@@ -2,9 +2,51 @@ import os
 import csv
 import re
 import math
+import socket
+import datetime
 import numpy as np
 from glob import glob
 import threading
+
+
+def scan_provenance(config):
+    """Gather scan provenance for the raw-scan metadata sidecar.
+
+    Records the scan id, timestamp, device/hardware, platform, software version
+    and a snapshot of the acquisition-relevant config (LiDAR device, sampling,
+    step resolution, scan angle, IMU leveling). Best-effort: any field that
+    cannot be resolved is left out rather than failing the scan.
+    """
+    from lib.platform_utils import get_hardware_model, get_platform
+
+    def cfg(*keys, default=None):
+        try:
+            return config.get(*keys)
+        except (KeyError, TypeError):
+            return default
+
+    try:
+        from lib.version import __version__
+    except Exception:
+        __version__ = "0.0.0"
+
+    prov = {
+        "scan_id": getattr(config, "scan_id", None),
+        "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        "author": socket.gethostname(),
+        "platform": get_platform(),
+        "hardware": get_hardware_model(),
+        "software_version": __version__,
+        "device_id": cfg("LIDAR", "DEVICE"),
+    }
+    prov["config"] = {
+        "sampling_rate": cfg("LIDAR", cfg("LIDAR", "DEVICE"), "SAMPLING_RATE"),
+        "scan_angle_deg": cfg("STEPPER", "SCAN_ANGLE"),
+        "target_res_deg": getattr(config, "target_res", None),
+        "h_res_deg": round(getattr(config, "h_res", 0.0), 6),
+        "imu_leveling": cfg("IMU", "LEVEL"),
+    }
+    return {k: v for k, v in prov.items() if v is not None}
 
 
 def modify_path(input_path, insert_string, ext=None):
