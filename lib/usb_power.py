@@ -150,10 +150,48 @@ def lidar_on(settings=None):
 
 def lidar_off(settings=None):
     """Cut power to the LiDAR USB hub (fully off). Returns True on success."""
+    return hub_off(settings)
+
+
+def hub_on(settings=None):
+    """Power the USB hub on (no device wait) — e.g. to attach a USB stick.
+
+    Unlike :func:`lidar_on` this does not wait for the LiDAR to enumerate; it is
+    the plain "give me USB-A power" primitive (used by the button long-press).
+    """
+    s = settings or load_settings()
+    if not s["enabled"]:
+        return False
+    ok = _switch("on", s["hub"])
+    if ok:
+        logger.info("USB hub %s power on", s["hub"])
+    return ok
+
+
+def hub_off(settings=None):
+    """Cut power to the USB hub. Returns True on success."""
     s = settings or load_settings()
     if not s["enabled"]:
         return False
     ok = _switch("off", s["hub"])
     if ok:
-        logger.info("LiDAR USB power off (hub %s)", s["hub"])
+        logger.info("USB hub %s power off", s["hub"])
     return ok
+
+
+def hub_is_on(hub=None):
+    """Return the hub's power state (True/False), or None if unreadable."""
+    exe = find_uhubctl()
+    if exe is None:
+        return None
+    hub = hub or load_settings()["hub"]
+    try:
+        result = subprocess.run(["sudo", "-n", exe, "-l", str(hub)],
+                                capture_output=True, text=True, timeout=10)
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    ports = [ln for ln in result.stdout.splitlines() if ln.strip().startswith("Port")]
+    if not ports:
+        return None
+    # a port line reads e.g. "  Port 1: 02a0 power 5gbps ..." (on) or "  0080 off"
+    return any(" off" not in ln for ln in ports)

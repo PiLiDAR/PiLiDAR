@@ -63,6 +63,16 @@ make script executable:
 
     chmod +x gpio_interrupt.py
 
+The button has two gestures (handled by `gpio_interrupt.py` via lgpio edge
+callbacks):
+
+- **short press** — start a scan (`PiLiDAR.py`).
+- **long press (> 2 s)** — toggle USB-A power. The LiDAR is USB-powered and the
+  Pi 4 can only switch the whole USB-A hub, so USB-A is off while idle (LiDAR
+  off, no power draw). Long-press to power USB-A on and attach a USB stick for
+  `usb_dump` (see the "Dumping Scans to USB Storage" section in
+  [protocol.md](protocol.md)), then long-press again to cut it.
+
 
 create new service for autostart
 

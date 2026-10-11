@@ -3,6 +3,17 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.6] - 2026-10-11
+
+### Added
+- **Scan-button long-press to toggle USB power (`gpio_interrupt.py`):** the button now has two gestures — *short press* starts a scan, *long press (> 2 s)* toggles USB-A hub power (`usb_power.hub_on/hub_off`). This is needed because the LiDAR is USB-powered and the Pi 4 can only switch the whole USB-A hub, so keeping the LiDAR off while idle leaves USB-A unpowered — the long press is the deliberate "give me USB-A" gesture to attach a USB stick for `usb_dump`. Implemented with `BOTH_EDGES` + a `threading.Timer`: the falling edge arms the timer, rising edge cancels it (short press → scan) or it fires (long press → toggle).
+- **Low-level `hub_on()`/`hub_off()`/`hub_is_on()` (`lib/usb_power.py`):** plain hub power primitives (no device wait) used by the button gesture; the `usb_power` and `ttyUSB`-renumbering logic is described below.
+- **`tests/test_button.py`:** 4 tests for the gesture logic (short → scan, long → toggle, toggle direction) using mocked hardware — suite now 39 tests.
+
+### Changed
+- **`gpio_interrupt.py`:** imports `lgpio` lazily inside `main()` so the module is importable (and testable) on desktop; the boot-time USB power cut moved into `main()`.
+- **`docs/setup.md`:** scan-button section documents the short/long-press gestures.
+
 ## [2.5.5] - 2026-10-11
 
 ### Added
