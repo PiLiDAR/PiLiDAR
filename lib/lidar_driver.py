@@ -19,11 +19,6 @@ import serial
 
 logger = logging.getLogger(__name__)
 
-# angular window (degrees) around STEP_AT_ANGLE that counts as "beam at the
-# anchor" -> step the turntable. The beam re-arms once it is >180° past the
-# anchor, so exactly one step happens per LiDAR revolution.
-_STEP_ANCHOR_TOL = 10.0
-
 # running from project root
 try:
     from lib.config import Config
@@ -61,7 +56,8 @@ class Lidar:
         # minimum-radius angle is not exactly 90°, so tune STEP_AT_ANGLE on the rig.
         # None -> blind packet-frame boundaries (legacy behaviour).
         self.step_at_angle      = config.get("LIDAR", config.DEVICE, "STEP_AT_ANGLE")
-        self._crossing          = False  # armed on the far side of the anchor angle
+        self._prev_angle        = None   # previous frame's start angle (deg)
+        self._crossing          = False  # anchor crossed in the current frame
 
         # SERIAL
         # dmesg | grep "tty"
@@ -266,12 +262,8 @@ class Lidar:
         """
         if self.out_i == self.out_len:
             return True
-        if self.step_at_angle is None or not self._crossing or self.out_i == 0:
-            return False
-        # signed angular distance to the anchor, in [-180, 180) — avoids the
-        # (tiny_negative % 360) -> ~360 float trap
-        delta = (self.angle_package[0] / self.deg2rad - self.step_at_angle + 180) % 360 - 180
-        return bool(abs(delta) <= _STEP_ANCHOR_TOL)
+        # fire on the frame that contains the anchor crossing
+        return bool(self.step_at_angle is not None and self._crossing and self.out_i > 0)
 
     def _finalize_plane(self):
         """Append the current plane, labelled with the angle it was *captured* at.
@@ -381,11 +373,13 @@ class Lidar:
         self.timestamp = int.from_bytes(byte_array[44:46][::-1], 'big')         # timestamp in milliseconds < 30000
         # CS = int.from_bytes(byte_array[46:47][::-1], 'big')                   # CRC Checksum, checked even before decoding
 
-        # arm the stepper-step phase anchor: once the beam is well past the
-        # anchor (>180°), the next crossing of it ends the plane and steps.
-        if self.step_at_angle is not None:
-            if (FSA - self.step_at_angle) % 360 > 180:
+        # detect the beam crossing the step-phase anchor (once per revolution): the
+        # anchor lies inside the forward arc from the previous frame's angle.
+        if self.step_at_angle is not None and self._prev_angle is not None:
+            arc = (FSA - self._prev_angle) % 360
+            if 0 < arc < 180 and (self.step_at_angle - self._prev_angle) % 360 < arc:
                 self._crossing = True
+        self._prev_angle = FSA
 
         angleStep = ((LSA - FSA) if LSA - FSA > 0 else (LSA + 360 - FSA)) / (self.dlength-1)
 

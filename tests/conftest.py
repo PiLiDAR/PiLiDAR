@@ -40,6 +40,7 @@ def lidar():
     lidar.out_len = 10
     # step-phase anchor: None -> blind packet-frame boundaries (legacy behaviour)
     lidar.step_at_angle = None
+    lidar._prev_angle = None
     lidar._crossing = False
     lidar.speeds = np.empty(lidar.out_len, dtype=lidar.dtype)
     lidar.timestamps = np.empty(lidar.out_len, dtype=lidar.dtype)
