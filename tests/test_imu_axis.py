@@ -1,7 +1,15 @@
-"""Tests for the turntable-axis fit (``lib/imu_orientation.py``).
+"""Tests for the IMU orientation / leveling helpers (``lib/imu_orientation.py``).
 
-Synthesises an IMU on a tilted turntable (known axis) and checks the fit
-recovers it, in both the body and world frames.
+All tests here are **synthetic**: they feed quaternions generated from a known
+turntable geometry (see ``_synthesise``) and check that the maths recovers what
+was put in — the axis (body + world frames), the rig tilt, the gravity up-vector,
+the mounting composition and the leveling rotation.
+
+They verify **self-consistency of the geometry**, *not* real-world accuracy. The
+known outstanding problem — leveling a real tilted scan only removes ~60 % of the
+tilt — lives in the data, not the maths here, and is documented in
+``docs/imu_leveling.md`` (measured against real scans ``261011-1953`` /
+``261011-2031``).
 """
 import numpy as np
 from scipy.spatial.transform import Rotation as R
