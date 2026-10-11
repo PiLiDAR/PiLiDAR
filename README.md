@@ -70,6 +70,22 @@ klick the images to open the pointclouds in Sketchfab.
 2. **Wire the hardware** and configure GPIO/I2C/UART: see [docs/hardware.md](docs/hardware.md#wiring) and [docs/setup.md](docs/setup.md)
 3. **Run a scan**: `~/venv/bin/python PiLiDAR.py` (or press the scan button)
 
+## Downloading a scan from the Pi
+
+Scans are written under `~/PiLiDAR/scans/<scan_id>/` on the Pi. Pull one (or all)
+down to your local `scans/` with `rsync`:
+
+```bash
+# one scan
+rsync -az --info=progress2 pi@192.168.1.16:/home/pi/PiLiDAR/scans/<scan_id>/ scans/<scan_id>/
+
+# everything, and delete local files that no longer exist on the Pi
+rsync -az --delete --info=progress2 pi@192.168.1.16:/home/pi/PiLiDAR/scans/ scans/
+```
+
+(`-a` preserves times/permissions, `-z` compresses, `--info=progress2` shows
+overall progress. The scan files are world-readable, so no `sudo` is needed.)
+
 ## Documentation
 
 | Topic | File |
