@@ -1,17 +1,23 @@
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
 from lib.pointcloud import load_pointcloud, save_pointcloud, get_transform_vectors, transform
-from lib.registration import global_registration, icp, color_icp
+from lib.registration import global_registration, icp, color_icp  # noqa: F401 (used in commented-out block)
 from lib.visualization import visualize
 
 
 def run_registration(source, target, voxel_size=0.15, fast_gr=False, p2l_icp=True, show=False):
 
     # GLOBAL REGISTRATION
-    reg_gr = global_registration(source, target, voxel_size, fast=fast_gr, 
-                                 normals_nn=30, fpfh_nn=100, max_iteration=100000, 
+    reg_gr = global_registration(source, target, voxel_size, fast=fast_gr,
+                                 normals_nn=30, fpfh_nn=100, max_iteration=100000,
                                  confidence=0.999, edgelength=0.9)
-    
+
     if show:
-        visualize([source, target], transformation=reg_gr.transformation, 
+        visualize([source, target], transformation=reg_gr.transformation,
                 point_colors="uniform", view=view, point_size=point_size)
 
     # # evaluate with voxel size of ICP
@@ -20,11 +26,11 @@ def run_registration(source, target, voxel_size=0.15, fast_gr=False, p2l_icp=Tru
 
 
     # ICP REGISTRATION
-    reg_icp = icp(source, target, reg_gr.transformation, 
+    reg_icp = icp(source, target, reg_gr.transformation,
                   voxel_size, p2l=p2l_icp)
 
     if show:
-        visualize([source, target], transformation=reg_icp.transformation, 
+        visualize([source, target], transformation=reg_icp.transformation,
                 point_colors="uniform", view=view, point_size=point_size)
 
     return reg_gr.transformation
@@ -41,10 +47,10 @@ if __name__ == "__main__":
     point_size = 1.0
     voxel_size = 0.15  # meter
 
-    pcd_list= [load_pointcloud("scans/240928-0912/240928-0912.ply"),
-               load_pointcloud("scans/240928-0922/240928-0922.ply"),
-               load_pointcloud("scans/240928-0944/240928-0944.ply"),
-               load_pointcloud("scans/240928-0948/240928-0948.ply")]
+    pcd_list= [load_pointcloud(str(ROOT / "scans" / "240928-0912" / "240928-0912.ply")),
+               load_pointcloud(str(ROOT / "scans" / "240928-0922" / "240928-0922.ply")),
+               load_pointcloud(str(ROOT / "scans" / "240928-0944" / "240928-0944.ply")),
+               load_pointcloud(str(ROOT / "scans" / "240928-0948" / "240928-0948.ply"))]
 
     source = pcd_list[1]
     target = pcd_list[2]
@@ -63,20 +69,20 @@ if __name__ == "__main__":
     print(f"[ICP]\t translate:\t{icp_translation} \trotate:\t{icp_euler})")
 
     # VISUALIZE
-    visualize([source, target], transformation=transformation, 
+    visualize([source, target], transformation=transformation,
         point_colors="uniform", view=view, point_size=point_size)
 
     # EXPORT TRANSFORMED POINT CLOUDS
     transformed_source = transform(source, transformation=transformation)
-    save_pointcloud(transformed_source + target, "scans/registration_test.ply")
+    save_pointcloud(transformed_source + target, str(ROOT / "scans" / "registration_test.ply"))
 
 
     # # ------------------------------------------------
     # # COLORED POINT CLOUD REGISTRATION
 
     # visualize([source, target], view=view, transformation=transformation, point_size=point_size)
-    
+
     # reg_color = color_icp(source, target,transformation)
     # #print(result_icp)
-    # visualize([source, target], transformation=reg_color.transformation, 
+    # visualize([source, target], transformation=reg_color.transformation,
     #           point_colors="uniform", view=view, point_size=point_size)

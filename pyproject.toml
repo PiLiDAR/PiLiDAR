@@ -50,3 +50,7 @@ ignore = [
     "E501",  # line length handled by formatter
     "E722",  # bare except used intentionally in lib/*/import fallback blocks
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# experiments/ bootstrap sys.path before importing lib.*, so imports follow code
+"experiments/*.py" = ["E402"]

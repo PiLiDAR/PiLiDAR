@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
 from lib.pointcloud import load_pointcloud, downsample, filter_outliers, filter_by_reference, save_pointcloud_threaded, print_stats
 from lib.visualization import visualize
 from lib.config import Config
@@ -9,10 +15,10 @@ if __name__ == '__main__':
 
     config = Config()
     config.init(scan_id=scan_id)
-    
+
     # enable visualization
     vis = True if config.platform == 'Windows' else False
-    
+
     pcd = load_pointcloud(config.pcd_path, as_tensor=False)
     print_stats(pcd, txt="Initial point cloud:")
 
