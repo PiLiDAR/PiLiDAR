@@ -37,6 +37,26 @@ def _synthesise(axis_world, c_body, n=400, tilt_from=0.0, tilt_to=np.pi):
     return wxyz * 16384.0
 
 
+def _synthesise_sweep(axis_world, c_body, n=400, a0_deg=0.0, a1_deg=180.0):
+    """Like ``_synthesise`` but also returns the stepper angles + mounting.
+
+    Returns ``(wxyz_int16, z_angles_deg, mount)`` where ``mount`` is the
+    world_from_body rotation at a = 0 deg (so gravity in the body frame at the
+    reference attitude is ``mount.inv().apply([0,0,1])``).
+    """
+    mount = R.align_vectors([axis_world], [c_body])[0]
+    a_deg = np.linspace(a0_deg, a1_deg, n)
+    qs = np.array([(R.from_rotvec(axis_world * np.radians(a)) * mount).as_quat() for a in a_deg])
+    wxyz = qs[:, [3, 0, 1, 2]] * 16384.0
+    return wxyz, a_deg, mount
+
+
+def _angle_deg(u, v):
+    u = np.asarray(u, float) / np.linalg.norm(u)
+    v = np.asarray(v, float) / np.linalg.norm(v)
+    return float(np.degrees(np.arccos(np.clip(abs(np.dot(u, v)), -1, 1))))
+
+
 def test_fit_recovers_body_axis():
     c_body = np.array([-0.62, -0.78, 0.07])
     c_body /= np.linalg.norm(c_body)
@@ -110,3 +130,85 @@ def test_cloud_up_vector_is_mounting_times_imu_up():
     up = cloud_up_vector(quats, mounting=mounting)
     assert np.allclose(up, mounting @ imu_up_vector(quats), atol=1e-9)
     assert np.isclose(np.linalg.norm(up), 1.0)
+
+
+# ---------------------------------------------------------------------------
+# reference_gravity: the leveling fix
+#
+# Over a 180 deg sweep the gravity direction traces only a HALF-cone about the
+# turntable axis in the body frame, so the normalized MEAN (imu_up_vector) lies
+# inside the cone and under-reports the tilt. reference_gravity samples gravity
+# at a single attitude (stepper angle ~= 0 deg) and is not cone-biased.
+# ---------------------------------------------------------------------------
+
+def test_mean_gravity_under_reports_tilt_but_reference_recovers_it():
+    from lib.imu_orientation import imu_up_vector, reference_gravity
+
+    c_body = np.array([1.0, 0.0, 0.0])
+    tilt = 10.0
+    axis_world = np.array([0.0, np.sin(np.radians(tilt)), np.cos(np.radians(tilt))])
+    wxyz, z_deg, mount = _synthesise_sweep(axis_world, c_body)
+    g_true = mount.inv().apply([0.0, 0.0, 1.0])          # gravity in body at a = 0
+
+    mean_err = _angle_deg(imu_up_vector(wxyz), g_true)
+    ref_err = _angle_deg(reference_gravity(wxyz, z_angles=z_deg), g_true)
+
+    assert mean_err > 1.1 * tilt          # mean is badly biased (cone half-angle)
+    assert ref_err < 0.5                  # reference gravity is essentially exact
+
+
+def test_reference_gravity_levels_a_tilted_floor():
+    from lib.imu_orientation import reference_gravity
+
+    tilt = 12.0
+    c_body = np.array([0.3, -0.5, 0.81])
+    c_body /= np.linalg.norm(c_body)
+    axis_world = np.array([0.0, np.sin(np.radians(tilt)), np.cos(np.radians(tilt))])
+    wxyz, z_deg, mount = _synthesise_sweep(axis_world, c_body)
+    g_true = mount.inv().apply([0.0, 0.0, 1.0])
+
+    # "level" the cloud by the reference gravity and check the floor is horizontal
+    leveled_floor = leveling_rotation(reference_gravity(wxyz, z_angles=z_deg)).apply(g_true)
+    assert _angle_deg(leveled_floor, [0.0, 0.0, 1.0]) < 0.5
+
+
+def test_reference_gravity_falls_back_to_first_sample_without_angles():
+    from lib.imu_orientation import reference_gravity
+
+    c_body = np.array([0.0, 1.0, 0.0])
+    axis_world = np.array([0.0, np.sin(np.radians(8.0)), np.cos(np.radians(8.0))])
+    wxyz, _z_deg, mount = _synthesise_sweep(axis_world, c_body)
+    g_true = mount.inv().apply([0.0, 0.0, 1.0])
+
+    # no z_angles -> first attitude (alpha ~ 0) is a fine reference too
+    assert _angle_deg(reference_gravity(wxyz), g_true) < 0.5
+
+
+def test_solve_mounting_maps_axis_and_gravity():
+    from lib.imu_orientation import solve_mounting
+
+    # body frame: turntable axis +Y, gravity 12 deg off it
+    tilt = 12.0
+    axis_body = np.array([0.0, 1.0, 0.0])
+    gravity_body = np.array([0.0, np.cos(np.radians(tilt)), np.sin(np.radians(tilt))])
+    # cloud frame: axis -> +Z, floor normal in the Y-Z plane
+    n_cloud = np.array([0.0, np.sin(np.radians(tilt)), np.cos(np.radians(tilt))])
+
+    M = solve_mounting(axis_body, gravity_body, gravity_cloud=n_cloud)
+    assert np.allclose(M @ axis_body, [0, 0, 1], atol=1e-6)
+    assert np.allclose(M @ gravity_body, n_cloud, atol=1e-6)
+    assert np.isclose(np.linalg.det(M), 1.0)                 # proper rotation
+    assert np.allclose(M @ M.T, np.eye(3), atol=1e-9)
+
+
+def test_solve_mounting_default_floor_normal_is_in_yz_plane():
+    from lib.imu_orientation import solve_mounting
+
+    tilt = 10.0
+    axis_body = np.array([1.0, 0.0, 0.0])
+    gravity_body = np.array([np.cos(np.radians(tilt)), np.sin(np.radians(tilt)), 0.0])
+
+    M = solve_mounting(axis_body, gravity_body)
+    expected = np.array([0.0, np.sin(np.radians(tilt)), np.cos(np.radians(tilt))])
+    assert np.allclose(M @ axis_body, [0, 0, 1], atol=1e-6)
+    assert np.allclose(M @ gravity_body, expected, atol=1e-6)

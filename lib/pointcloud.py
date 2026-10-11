@@ -10,10 +10,10 @@ from scipy.spatial.transform import Rotation as R
 import pickle
 
 try:
-    from lib.imu_orientation import Orientation, cloud_up_vector, leveling_rotation, mounting_matrix
+    from lib.imu_orientation import (Orientation, cloud_up_vector, leveling_rotation, mounting_matrix, reference_gravity)
 except Exception:
     try:
-        from imu_orientation import Orientation, cloud_up_vector, leveling_rotation, mounting_matrix
+        from imu_orientation import (Orientation, cloud_up_vector, leveling_rotation, mounting_matrix, reference_gravity)
     except Exception:
         Orientation = None
 
@@ -108,11 +108,14 @@ def process_raw(config, save=True):
         raw_scan = load_raw_scan(config.raw_path)
 
 
-        # IMU data -> up vector in the cloud frame (for leveling at the end)
+        # IMU data -> gravity direction in the cloud frame (for leveling at the end).
+        # Use gravity at the sweep's reference attitude, NOT the sweep mean: the
+        # mean lies inside the 180 deg gravity half-cone and under-reports the tilt.
         if "quaternions" in raw_scan and config.get("IMU", "LEVEL"):
-            imu_up = cloud_up_vector(raw_scan["quaternions"], mounting=mounting_matrix(config))
+            g_ref = reference_gravity(raw_scan["quaternions"], z_angles=raw_scan.get("z_angles"))
+            imu_up = mounting_matrix(config) @ g_ref
             print(f"\nIMU: {len(raw_scan['quaternions'])} samples; "
-                  f"up in cloud frame = {np.round(imu_up, 3).tolist()}")
+                  f"reference gravity in cloud frame = {np.round(imu_up, 3).tolist()}")
 
         array_3D = merge_2D_points(raw_scan,
                         position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm

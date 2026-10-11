@@ -150,3 +150,32 @@ def test_finalize_plane_flushes_partial_plane(lidar):
     lidar.out_i = 5                          # partial plane still gets flushed
     lidar._finalize_plane()
     assert lidar.cartesian_list[0].shape == (5 * lidar.dlength, 3)
+
+
+def test_finalize_plane_drops_partial_warmup_plane(lidar):
+    # Anchor mode: the FIRST plane spans stream-start -> first crossing and is a
+    # partial arc tagged with a stale pre-sweep z_angle -> must be dropped.
+    lidar.step_at_angle = 50.0
+    lidar._warmed_up = False
+    lidar.z_angle = 269.99                   # stale pre-sweep angle
+    lidar.out_i = 3
+    lidar._crossing = True
+    lidar._finalize_plane()
+    assert lidar.z_angles == []              # warm-up plane not emitted
+    assert lidar._warmed_up is True
+    assert lidar._crossing is False
+    # the NEXT plane (a full revolution) is emitted normally
+    lidar.z_angle = 0.5
+    lidar.out_i = 10
+    lidar._finalize_plane()
+    assert lidar.z_angles == [0.5]
+
+
+def test_finalize_plane_legacy_keeps_first_plane(lidar):
+    # Legacy fixed-frame mode: the first frame is a full packet frame -> kept.
+    lidar.step_at_angle = None
+    lidar._warmed_up = False
+    lidar.z_angle = 0.0
+    lidar.out_i = 5
+    lidar._finalize_plane()
+    assert lidar.z_angles == [0.0]

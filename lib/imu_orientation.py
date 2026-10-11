@@ -201,11 +201,53 @@ def imu_up_vector(quaternions, scale=16384.0):
     The mean of the per-sample gravity directions (``R^T @ world_up``); drift-free
     and already the axis projection for a level rig. For a strongly tilted rig
     prefer ``fit_turntable_axis(...).c_body`` (the incremental-rotation estimate).
+
+    .. deprecated::
+       For **leveling** use :func:`reference_gravity` instead. Over a 180 deg
+       sweep the mean gravity traces only a half-cone about the turntable axis,
+       so its mean lies *inside* the cone and under-reports the tilt (leveling
+       with it removes only ~60 % of a real tilt). ``reference_gravity`` samples
+       gravity at a single attitude and is not cone-biased.
     """
     q = np.asarray(quaternions, dtype=float) / scale
     q /= np.linalg.norm(q, axis=1, keepdims=True)
     g_body = R.from_quat(q[:, [1, 2, 3, 0]]).as_matrix()[:, 2, :]
     return _unit(g_body.mean(axis=0))
+
+
+def reference_gravity(quaternions, z_angles=None, scale=16384.0, window_deg=2.0):
+    """Gravity direction in the IMU body frame at the sweep's **reference attitude**.
+
+    The IMU sits on the rotating platform, so as the turntable turns, gravity
+    sweeps a cone about the rotation axis in the body frame. The **mean** over a
+    180 deg sweep (:func:`imu_up_vector`) is biased *inside* that cone and
+    therefore under-reports the rig tilt. Sampling gravity at a single attitude
+    avoids the bias entirely:
+
+    - ``z_angles`` are the per-plane stepper angles (``raw_scan["z_angles"]``).
+      The reference is the sample nearest ``0 deg`` (the sweep start); ``z_angles``
+      co-located within ``+-window_deg`` are averaged to smooth sensor noise
+      (a ~2 deg arc contributes a negligible cone bias). When ``z_angles`` is
+      ``None`` the first sample is used.
+
+    Returns a unit vector (gravity, i.e. the scanner's true *up*, in the IMU body
+    frame) ready to be mapped into the cloud frame by the mounting and levelled
+    with :func:`leveling_rotation`.
+    """
+    q = np.asarray(quaternions, dtype=float) / scale
+    q /= np.linalg.norm(q, axis=1, keepdims=True)
+    g_body = R.from_quat(q[:, [1, 2, 3, 0]]).as_matrix()[:, 2, :]   # (N, 3)
+
+    if z_angles is None:
+        # no angles: use the sweep start (first few co-located samples) as the
+        # reference attitude -- NOT the whole-sweep mean, which is cone-biased.
+        k = min(len(g_body), 5)
+        return _unit(g_body[:k].mean(axis=0))
+
+    z = np.asarray(z_angles, dtype=float)[:len(g_body)]
+    ref = int(np.argmin(np.abs(z)))                # sample nearest 0 deg
+    near = np.abs(((z - z[ref] + 180.0) % 360.0) - 180.0) <= window_deg
+    return _unit(g_body[near].mean(axis=0))
 
 
 def leveling_rotation(up_vector):
@@ -243,6 +285,33 @@ def cloud_up_vector(quaternions, mounting, scale=16384.0):
     :func:`leveling_rotation`.
     """
     return np.asarray(mounting, dtype=float) @ imu_up_vector(quaternions, scale=scale)
+
+
+def solve_mounting(axis_body, gravity_body, axis_cloud=None, gravity_cloud=None):
+    """Solve the IMU->cloud mounting from two physical vector correspondences.
+
+    Because the cloud is assembled in device space its up-axis is ``+Z`` by
+    construction, so ``axis_body`` (the turntable axis, e.g.
+    ``fit_turntable_axis(...).c_body`` or ``c_body_accel``) must map to ``+Z``.
+    ``gravity_body`` (``reference_gravity``) must map to the floor normal measured
+    from the assembled cloud (``gravity_cloud``); for a rig pitched only about a
+    horizontal axis the floor normal lies in the Y-Z plane, so a good default is
+    ``[0, sin(tilt), cos(tilt)]``.
+
+    Uses ``scipy.spatial.transform.Rotation.align_vectors`` (a proper,
+    least-squares rotation) over the two correspondences. The two input vectors
+    **must not be parallel** (a level rig makes them nearly so — calibrate with a
+    clearly tilted rig).
+
+    Returns the 3x3 IMU->cloud rotation matrix.
+    """
+    axis_cloud = np.array([0.0, 0.0, 1.0]) if axis_cloud is None else np.asarray(axis_cloud, float)
+    if gravity_cloud is None:
+        tilt = np.arccos(np.clip(np.dot(_unit(gravity_body), _unit(axis_body)), -1, 1))
+        gravity_cloud = np.array([0.0, np.sin(tilt), np.cos(tilt)])
+    gravity_cloud = np.asarray(gravity_cloud, float)
+    return R.align_vectors([axis_cloud, gravity_cloud],
+                           [np.asarray(axis_body, float), np.asarray(gravity_body, float)])[0].as_matrix()
 
 
 if __name__ == '__main__':

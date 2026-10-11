@@ -3,6 +3,21 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.11] - 2026-10-11
+
+### Fixed
+- **Broken first plane of every sweep (stale `z_angle` + partial arc).** The serial stream is live and the turntable already turning when a scan starts, so the first plane spans *stream-start → first anchor crossing*: a **partial** fan labelled with the **stale** pre-sweep `z_angle` (e.g. `269.99°` before a `0.19°` sweep start). Revolved by `-z_angle` it landed ~90–270° from its true azimuth (the spurious tilted slice visible in every scan). `Lidar._finalize_plane()` now drops the first (warm-up) plane in anchor mode — the sweep begins cleanly at the first crossing. Legacy fixed-frame mode is unchanged.
+- **IMU leveling under-corrected a tilted scan (~60 %).** `imu_up_vector()` averaged gravity over the sweep, but over a 180° sweep gravity traces only a **half-cone** about the turntable axis, so the normalized mean lies *inside* the cone and under-reported the tilt. New **`reference_gravity()`** samples gravity at a single attitude (stepper angle ≈ 0°) and is not cone-biased; `process_raw()` now levels with it.
+
+### Added
+- **`reference_gravity()`** and **`solve_mounting()`** (`lib/imu_orientation.py`): gravity at the reference attitude, and a least-squares IMU→cloud mounting solver from two vector correspondences (turntable axis → +Z, reference gravity → floor normal).
+- **`experiments/calibrate_mounting.py`**: solve and validate `IMU.MOUNTING` from a scan (needs quaternions; use a clearly **tilted** rig so the two constraints are not degenerate).
+- **`experiments/floor_tilt.py`**: RANSAC floor-plane tilt metric (raw vs leveled) — the honest "is the floor horizontal?" test.
+- Tests: `reference_gravity` (recovers true gravity where the mean is biased; levels a synthetic tilted floor), `solve_mounting` (maps axis→+Z and gravity→floor, proper rotation), and the acquisition warm-up drop. Suite now 67 tests.
+
+### Notes
+- ⚠️ **`IMU.MOUNTING` must be re-solved** (`experiments/calibrate_mounting.py`) on a tilted scan before the reference-gravity leveling is trustworthy: the matrix currently in `config.json` was calibrated to map the *old biased* mean gravity to the floor, so it is ~89° off in azimuth relative to the corrected gravity (the old result only "worked" by the bias cancelling that error). Until re-calibration, leveled exports may regress.
+
 ## [2.5.10] - 2026-10-11
 
 ### Added

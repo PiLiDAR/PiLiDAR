@@ -106,6 +106,14 @@ class Lidar:
         self.z_angles           = []
         self.cartesian_list     = []
 
+        # warm-up: the serial stream is live and the turntable is already turning
+        # when the scan starts, so the FIRST plane spans stream-start -> the first
+        # anchor crossing and is a PARTIAL arc. It must not be emitted: its
+        # z_angle is still the stale pre-sweep value (the callback refreshes it
+        # only after the first finalize), so it would be revolved to the wrong
+        # azimuth. Drop it and let the sweep begin cleanly at the first crossing.
+        self._warmed_up         = False
+
         # visualization
         self.visualization      = visualization
 
@@ -279,8 +287,17 @@ class Lidar:
         Must run BEFORE the stepper moves (the callback advances ``z_angle`` for
         the next plane) — otherwise each fan is tagged with the next angle and the
         whole cloud is rotated by one step.
+
+        The very first plane of a sweep is a **warm-up**: it spans stream-start ->
+        the first anchor crossing, so it is a partial arc whose ``z_angle`` is
+        still the stale pre-sweep value. It is dropped (in anchor mode) and the
+        sweep begins at the next crossing; in legacy fixed-frame mode the first
+        frame is a full packet frame and is kept.
         """
-        if self.out_i > 0:
+        warmup = not self._warmed_up and self.step_at_angle is not None
+        if warmup:
+            self._warmed_up = True
+        elif self.out_i > 0:
             self.z_angles.append(self.z_angle)
             self.cartesian_list.append(np.copy(self.points_2d[:self.out_i * self.dlength]))
         self._crossing = False

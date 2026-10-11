@@ -43,6 +43,7 @@ def lidar():
     lidar.step_at_angle = None
     lidar._prev_angle = None
     lidar._crossing = False
+    lidar._warmed_up = True   # tests start already past the warm-up plane
     lidar.speeds = np.empty(lidar.plane_max, dtype=lidar.dtype)
     lidar.timestamps = np.empty(lidar.plane_max, dtype=lidar.dtype)
     lidar.points_2d = np.empty((lidar.plane_max * lidar.dlength, 3), dtype=lidar.dtype)
