@@ -89,14 +89,18 @@ def test_leveling_rotation_maps_up_to_world_z():
     assert np.allclose(rot.apply(up), [0, 0, 1], atol=1e-6)
 
 
-def test_cloud_up_vector_maps_imu_y_to_cloud_z():
-    # scanner level: up = +Y in IMU frame -> cloud up vector should be +Z
-    from lib.imu_orientation import cloud_up_vector, _IMU_TO_CLOUD
-    # a static IMU whose body up (gravity dir) is +Y
-    c_body = np.array([0.0, 1.0, 0.0])
+def test_cloud_up_vector_maps_gravity_into_cloud_frame():
+    # A level rig: gravity in body == turntable axis == the IMU's up. After the
+    # calibrated mounting mapping the result must be the cloud up (+Z).
+    from lib.imu_orientation import cloud_up_vector, _IMU_TO_CLOUD, imu_up_vector
+    c_body = np.array([0.0, 1.0, 0.0])         # ideal level rig, up = +Y in IMU
     axis_world = np.array([0.0, 0.0, 1.0])
     quats = _synthesise(axis_world, c_body, n=10, tilt_from=0.0, tilt_to=0.0)
+
     up = cloud_up_vector(quats)
-    assert np.isclose(abs(np.dot(up, [0, 0, 1])), 1.0, atol=1e-6)
-    # the mapping is a proper rotation
-    assert np.isclose(np.linalg.det(_IMU_TO_CLOUD), 1.0)
+    # the calibrated mounting carries the real rig's mounting offset, so the
+    # ideal +Y body-up maps close to but not exactly onto +Z; require < 3 deg.
+    assert np.degrees(np.arccos(abs(np.dot(up, [0, 0, 1])))) < 3.0
+    # the mapping is a proper rotation (stored rounded to 4 dp)
+    assert np.isclose(np.linalg.det(_IMU_TO_CLOUD), 1.0, atol=1e-4)
+    assert np.isclose(np.linalg.norm(imu_up_vector(quats)), 1.0)
