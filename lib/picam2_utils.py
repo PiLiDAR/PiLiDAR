@@ -161,31 +161,46 @@ class Camera:
                 return True
         return False
 
-    def _capture_at(self, path, exposure_time, gain, awbgains, tol_exposure=0.05, tol_gain=0.02, retries=10):
+    def _capture_at(self, path, exposure_time, gain, awbgains, retries=15):
         """Save a still and guarantee it carries the requested settings.
 
-        Applies the controls, then captures requests until one reports both the
-        requested ``ExposureTime`` (within ``tol_exposure``) and ``AnalogueGain``
-        (within ``tol_gain`` — the tight bound matters because the bracket shifts
-        gain by exactly 2×), saving only that frame. Falls back to saving the
-        last frame if no match is found (better a wrong exposure than no image).
+        ``set_controls()`` takes effect a frame or two *after* the frame already
+        in flight, so a naive ``capture_file()`` saves the previous step's
+        settings. This grabs requests and accepts only a frame whose reported
+        ``ExposureTime`` and ``AnalogueGain`` really match the request — the
+        tolerance is proportional (never an absolute millisecond floor, which
+        would swallow the dark bracket steps). After ``retries`` it relaxes once
+        rather than losing the shot.
         """
         want_ns = _ns(exposure_time)
-        slack_ns = max(1_000_000, want_ns * tol_exposure)
         self._lock_3a()
         self._set_manual(exposure_time, gain, awbgains)
+
+        def matches(meta, tol_e, tol_g):
+            ok_e = abs(meta["ExposureTime"] - want_ns) <= want_ns * tol_e
+            ok_g = abs(meta["AnalogueGain"] - gain) <= tol_g
+            return ok_e and ok_g
+
         for _ in range(retries):
             request = self.camera.capture_request()
             meta = request.get_metadata()
-            ok_e = abs(meta["ExposureTime"] - want_ns) <= slack_ns
-            ok_g = abs(meta["AnalogueGain"] - gain) <= tol_gain
-            if ok_e and ok_g:
+            if matches(meta, 0.05, 0.02):        # strict
                 request.save("main", path)
                 request.release()
                 return path
-            request.release()          # stale frame -> discard and retry
-        # never matched: save one more frame rather than losing the shot
-        self.camera.capture_file(path)
+            request.release()                    # stale frame -> discard, retry
+
+        # last resort: accept a looser exposure match (gain must still match)
+        for _ in range(5):
+            request = self.camera.capture_request()
+            meta = request.get_metadata()
+            if matches(meta, 0.5, 0.05):
+                request.save("main", path)
+                request.release()
+                return path
+            request.release()
+
+        self.camera.capture_file(path)           # give up gracefully
         return path
 
     def _set_manual(self, exposure_time, gain, awbgains):
