@@ -3,6 +3,18 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.7] - 2026-10-11
+
+### Changed
+- **Stepper step is now phase-locked to the LiDAR beam angle (`lib/lidar_driver.py`):** the turntable used to step on a blind 180-packet frame boundary, so the seam landed at an arbitrary LiDAR angle. New `LIDAR.<DEVICE>.STEP_AT_ANGLE` (default 90°) makes the driver step when the beam *crosses* that angle — the point nearest the rotation axis, where the platform's rotation causes the least motion smear. Crossings are detected by edge detection (one step per LiDAR revolution); in anchor mode the crossing is the **only** plane boundary (a fixed packet frame would beat against it and cut planes short) with a `plane_max` safety cap so a missed crossing cannot overflow the preallocated arrays. Verified on hardware: steps fire consistently at FSA ≈ 90.5°, one per revolution, uniform 181-packet planes.
+  - Because the LiDAR is mounted *off* the rotation axis (it sits back-to-back with the camera, offset in height/distance), the minimum-radius angle is not exactly 90°/270° — tune `STEP_AT_ANGLE` on the rig. Either pole works (both lie on the axis).
+
+### Fixed
+- **Plane/fan off-by-one (`lib/lidar_driver.py`):** `read_loop` called the stepper callback (which advances `z_angle`) *before* appending `self.z_angle`, so every fan was labelled with the **next** angle while it was captured at the previous one — a systematic one-step (~0.18°) rotation of the whole cloud. The plane is now finalised (and labelled with its captured angle) before the step, via the extracted `_finalize_plane()`.
+
+### Added
+- **`tests/test_packet.py`:** 8 tests for the anchor crossing detection, the anchor-mode plane boundary (including the frame-full-must-not-cut and safety-cap cases), and the captured-angle labelling — suite now 48 tests.
+
 ## [2.5.6] - 2026-10-11
 
 ### Added
