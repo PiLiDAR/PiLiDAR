@@ -89,7 +89,7 @@
     },
 
     "IMU": {
-        "i2c_bus": 3, 
+        "i2c_bus": 6, 
         "device_address": 104,
         "frequency": 50
     }, 

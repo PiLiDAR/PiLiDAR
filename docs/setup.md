@@ -30,24 +30,35 @@ On the desktop, use your own venv the same way.
         sudo nano /etc/systemd/logind.conf
         HandlePowerKey=poweroff
 
-## enable i2c-GPIO for GY-521 Accelerometer
+## enable I2C for the GY-521 Accelerometer (MPU6050)
 
-GY-521 (MPU 6060): Accelerometer, Gyroscope and thermometer
+GY-521 (MPU6050): Accelerometer, Gyroscope and thermometer
 i2c adress: 0x68
 ![GY-521](https://www.makershop.de/download/MPU6050-Pinout.png)
 
-Since GPIO3 is hardwired to the Power Button, we need to use i2c-GPIO to map custom i2c pins ([tutorial](https://www.instructables.com/Raspberry-PI-Multiple-I2c-Devices/)). Unlike serial is not getting crossed, so we connect SDA-SDA and SCL-SCL.
-SDA: GPIO22
-SCL: GPIO27
-
-disable ic2_arm and enable i2c-gpio in /boot/firmware/config.txt
+GPIO3 is hardwired to the power button, so the default **hardware** I2C-1
+(GPIO2/GPIO3) cannot be used. Rather than falling back to slow bit-banged I2C
+(`i2c-gpio`) — which cannot drain the MPU6050's DMP FIFO fast enough and makes
+the quaternion stream corrupt — enable a second **hardware** bus with the `i2c6`
+overlay on spare pins:
 
     dtparam=i2c_arm=off
-    dtoverlay=i2c-gpio,bus=3,i2c_gpio_delay_us=1,i2c_gpio_sda=22,i2c_gpio_scl=27
+    dtoverlay=i2c6,pins_22_23
 
-search for devices on i2c bus 3:
+| Signal | BCM GPIO | Physical pin |
+|---|---|---|
+| SDA | GPIO22 | pin 15 |
+| SCL | GPIO23 | pin 16 |
 
-    sudo i2cdetect -y 3
+(Unlike serial, I2C is not crossed, so connect SDA–SDA and SCL–SCL.)
+
+search for devices on i2c bus 6:
+
+    sudo i2cdetect -y 6
+
+the bus must report as hardware (`bcm2835`), not `i2c-gpio`:
+
+    cat /sys/bus/i2c/devices/i2c-6/name
 
 ## Power LED and CPU fan
 

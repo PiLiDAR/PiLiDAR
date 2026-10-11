@@ -3,6 +3,18 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.9] - 2026-10-11
+
+### Fixed
+- **MPU6050 quaternion corruption (bit-banged I²C + slow FIFO drain):** the IMU sat on `i2c-gpio` (software I²C on GPIO22/27, because hardware I²C-1 needs GPIO3 = the power button). The `mpu6050` library drains the DMP FIFO **one byte per I²C transaction**, which the bit-banged bus cannot sustain at 50 Hz × 42 B — the FIFO fills to 1024 and the byte stream loses alignment, so the saved quaternions were garbage (e.g. norms 25000–55000 instead of ~16384). `lib/imu_driver.py` now reads the FIFO with **bulk block transactions** (≤32 B, within the SMBus limit) and **validates the quaternion norm**, resetting the FIFO to re-sync on any mismatch.
+
+### Changed
+- **IMU moved to a hardware I²C bus:** `dtoverlay=i2c-gpio,...bus=3...` → `dtoverlay=i2c6,pins_22_23` (hardware `bcm2835` bus; SDA stays GPIO22/pin 15, SCL moves GPIO27/pin 13 → GPIO23/pin 16). `IMU.i2c_bus` 3 → 6; `docs/setup.md` documents the new overlay, pins and the hardware-vs-bit-banged check.
+
+### Added
+- **`fit_turntable_axis()` (`lib/imu_orientation.py`):** fits the turntable up-axis from a sweep's IMU quaternions two ways — the common axis of the incremental rotations (body and gravity-referenced world frames; drift-averaged over the sweep) and an independent gravity-cone plane fit — plus the rig tilt. `tests/test_imu_axis.py` (4 tests) validates both on synthetic data; suite now 57 tests.
+- **`experiments/up_vector_probe.py`:** logs the IMU quaternion at every stepper angle over a 360° sweep to `/tmp/up_vector_sweep.csv` (raw values, so corruption is visible).
+
 ## [2.5.8] - 2026-10-11
 
 ### Fixed
