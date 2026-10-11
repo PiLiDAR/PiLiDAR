@@ -74,11 +74,11 @@ The test suite passes in CI on desktop machines without physical hardware or Ras
 - Provide deterministic stepper motion and responsive hardware controls.
 
 ### Tasks
-- **High-Speed Serial Driver Overhaul**
-  - Replace byte-by-byte reads (`read()`) with buffered block reads and sliding window frame parsers.
-  - Implement a dedicated background reader thread with a bounded thread-safe queue to decouple serial I/O from processing.
-  - Add automated sync-byte recovery, timeout handling, and malformed packet error logging.
-  - Benchmark and validate sustained throughput across all supported models: LD06, LD19, and STL27L.
+- **High-Speed Serial Driver Overhaul** — ✅ done (v2.5.0 driver, v2.5.3 benchmark)
+  - ~~Replace byte-by-byte reads (`read()`) with buffered block reads and sliding window frame parsers.~~ → 4 KB block reads + sliding-window parser with CRC8 validation and automated sync-byte recovery (`lib/lidar_driver.py`).
+  - ~~Implement a dedicated background reader thread with a bounded thread-safe queue to decouple serial I/O from processing.~~ → `start_reader()`/`read_from_queue()` with `LIDAR.<DEVICE>.QUEUE_SIZE` (default 1024).
+  - ~~Add automated sync-byte recovery, timeout handling, and malformed packet error logging.~~ → done; `dropped_packets`/`malformed_packets` counters exposed.
+  - ~~Benchmark and validate sustained throughput across all supported models: LD06, LD19, and STL27L.~~ → validated on hardware with `experiments/serial_benchmark.py`: STL27L @ 921,600 baud sustained 30 s at 1796.7 packets/s (0.2% deviation from the nominal 1800), 21,561 samples/s, **0 dropped, 0 malformed**, queue high-water 340/1024. LD06/LD19 validation pending hardware availability.
 - **Modern GPIO & Motion Control** — ✅ done (v2.5.1)
   - ~~Migrate from deprecated `RPi.GPIO` to modern `gpiozero` / `lgpio` (compatible with Pi 4, Pi 5, and kernel 6.x+).~~ → completed via the lgpio C-API (`gpiochip_open`/`gpio_claim_output`/`gpio_write`): `gpio_interrupt.py` (v2.5.0), `lib/a4988_driver.py` + the relay setup in `lib/config.py` (v2.5.1). No `RPi.GPIO` imports remain.
   - Investigate hardware timer / PWM stepping to eliminate userspace `time.sleep` jitter during sweeps.

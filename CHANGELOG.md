@@ -3,6 +3,14 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.3] - 2026-10-11
+
+### Added
+- **Serial throughput benchmark (`experiments/serial_benchmark.py`):** validates the v2.5.0 high-speed serial driver on hardware — runs the background reader + bounded queue at the configured baud rate for a fixed duration and reports packet/sample rate, queue high-water mark, dropped and malformed packet counts against the nominal device rate.
+
+### Verified
+- **Zero-drop acquisition on hardware:** STL27L @ 921,600 baud sustained for 30 s on the Pi: 1796.7 packets/s (0.2% deviation from the nominal 1800), 21,561 samples/s, **0 dropped packets, 0 malformed**, queue high-water 340/1024. Completes the Phase 1 "High-Speed Serial Driver Overhaul" benchmark task.
+
 ## [2.5.2] - 2026-10-11
 
 ### Fixed
