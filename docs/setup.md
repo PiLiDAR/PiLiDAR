@@ -95,6 +95,19 @@ check service if necessary:
     sudo systemctl status pilidar.service
 
 
+## Pre-flight Hardware Checks
+Before a scan, run the diagnostics to catch a dead LiDAR, a loose I2C jumper,
+a camera that failed to enumerate, or a full disk:
+
+    ~/venv/bin/python -m lib.diagnostics
+
+It checks the Python version, platform, free storage, Hugin tools, the LiDAR
+UART packet stream, the MPU6050 over I2C, camera enumeration, and GPIO access,
+printing one line per check. Use `--json` for machine-readable output,
+`--lidar-seconds N` to sample the UART longer, and `--skip lidar imu ...` to
+skip checks. The exit code is `1` if any check FAILs (WARN/SKIP are
+non-fatal), so it can gate a scan in a wrapper script.
+
 ## set Permission for UART on Raspberry Pi
 temporary solution:
 

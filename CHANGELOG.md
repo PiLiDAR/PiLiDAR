@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.4] - 2026-10-11
+
+### Added
+- **Pre-flight hardware diagnostics (`lib/diagnostics.py`):** an automated `pilidar doctor` routine (Phase 1 deliverable) that checks Python version, platform, free storage, Hugin tools, the LiDAR UART packet stream, MPU6050 `WHO_AM_I` over I2C, Picamera2 camera enumeration, and gpiochip access. Hardware checks SKIP cleanly off-Pi, the Hugin check is Flatpak-aware, `--json` gives machine-readable output, and the exit code is 1 on any FAIL (WARN/SKIP non-fatal) so it can gate a scan. Validated on the Pi: 8/8 OK.
+- **`tests/test_diagnostics.py`:** 4 tests covering result aggregation, off-Pi hardware SKIP behaviour, the `--skip` argument, and storage reporting (suite now 29 tests).
+
+### Changed
+- **`docs/setup.md`:** new "Pre-flight Hardware Checks" section documenting `python -m lib.diagnostics`.
+
 ## [2.5.3] - 2026-10-11
 
 ### Added

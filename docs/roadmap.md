@@ -89,8 +89,8 @@ The test suite passes in CI on desktop machines without physical hardware or Ras
   - ~~Replace the iterative AWB loop.~~ → `estimate_parameters()` lets 3A settle over a few frames, reads `ExposureTime` / `AnalogueGain` / `DigitalGain` / `ColourGains` from `capture_metadata()`, then locks 3A (`AeEnable=False`, `AwbEnable=False`). No EXIF parsing, no iteration.
   - ~~Preserve the shutter-for-dark / gain-for-bright HDR bracket.~~ → `take_hdr()` keeps negative-EV-via-shutter / positive-EV-via-gain; gain clamped to `MAX_ANALOGUE_GAIN = 16` (the IMX477 via libcamera exposes no `DigitalGain` control).
   - ~~Watch the units.~~ → ns↔s and linear-gain conversions handled at the module boundary.
-- **Pre-Flight Hardware Diagnostics**
-  - Implement an automated diagnostic routine (`pilidar doctor`) checking UART communication, I2C IMU connectivity, camera availability, and storage space before beginning a scan.
+- **Pre-Flight Hardware Diagnostics** — ✅ done (v2.5.4, `lib/diagnostics.py`)
+  - ~~Implement an automated diagnostic routine (`pilidar doctor`) checking UART communication, I2C IMU connectivity, camera availability, and storage space before beginning a scan.~~ → `python -m lib.diagnostics` checks Python/platform/storage/Hugin plus UART packet stream, MPU6050 `WHO_AM_I` over I2C, Picamera2 enumeration, and gpiochip access. Non-fatal WARN/SKIP, exit code 1 on any FAIL so it can gate a scan; `--json` for machine output. Validated on the Pi: 8/8 OK. (The Phase 3 CLI will expose it as `pilidar doctor`.)
 
 ### Deliverables
 - Zero-drop, multithreaded serial driver for LD06/STL27L.
