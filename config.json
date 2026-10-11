@@ -80,7 +80,7 @@
     },
 
     "CAM": {
-        "preview_dims": [320, 240],
+        "preview_dims": [640, 480],
         "dims": [4056,3040],
         "base_gain": 1.0,
         "max_gain": 2.0,

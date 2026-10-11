@@ -121,23 +121,46 @@ class Camera:
         frame reflects the manual controls we set."""
         self.camera.capture_array()
 
-    def _sync_to(self, exposure_time, tolerance=0.02, attempts=12):
-        """Block until the sensor reports the requested exposure.
+    def _sync_to(self, exposure_time, tolerance=0.05, attempts=12):
+        """Capture one frame whose exposure (and gain) match the request.
 
-        ``set_controls()`` only takes effect on the *next* captured frame, so a
-        ``capture_file()`` issued right after it can still save the previous
-        frame's exposure. This drains frames (via ``capture_metadata()``) until
-        the reported ``ExposureTime`` matches ``exposure_time`` (within
-        ``tolerance``, i.e. 2%, or 1 ms), so the subsequently saved frame really
-        carries the exposure we asked for.
+        ``set_controls()`` applies to a *later* frame than the one already in
+        flight, so ``capture_file()`` issued right after it often saves the
+        previous exposure. To be sure, this grabs requests and checks their
+        actual metadata, discarding any that do not match ``exposure_time``
+        (within ``tolerance``) until one does — the saved frame then really
+        carries the requested exposure, however short the bracket step is.
         """
         want_ns = _ns(exposure_time)
         slack = max(1_000_000, want_ns * tolerance)     # >= 1 ms or `tolerance`
         for _ in range(attempts):
-            meta = self.camera.capture_metadata()
-            if abs(meta["ExposureTime"] - want_ns) <= slack:
+            if abs(self.camera.capture_metadata()["ExposureTime"] - want_ns) <= slack:
                 return True
         return False
+
+    def _capture_at(self, path, exposure_time, gain, awbgains, tolerance=0.05, retries=8):
+        """Save a still and guarantee it carries ``exposure_time``.
+
+        Applies the controls, then captures requests until one reports the
+        requested exposure in its own metadata, saving only that frame. Falls
+        back to saving the last frame if no match is found (better a wrong
+        exposure than no image).
+        """
+        want_ns = _ns(exposure_time)
+        slack = max(1_000_000, want_ns * tolerance)
+        self._lock_3a()
+        self._set_manual(exposure_time, gain, awbgains)
+        for _ in range(retries):
+            request = self.camera.capture_request()
+            meta = request.get_metadata()
+            if abs(meta["ExposureTime"] - want_ns) <= slack:
+                request.save("main", path)
+                request.release()
+                return path
+            request.release()          # stale frame -> discard and retry
+        # never matched: save one more frame rather than losing the shot
+        self.camera.capture_file(path)
+        return path
 
     def _set_manual(self, exposure_time, gain, awbgains):
         """Apply manual exposure / gain / white-balance to the sensor.
@@ -191,11 +214,7 @@ class Camera:
 
         Assumes the camera is already configured (see ``configure()``).
         """
-        self._lock_3a()
-        self._set_manual(exposure_time, gain, awbgains)
-        self._flush()  # drop the startup auto-mode frame
-        self.camera.capture_file(path)
-        return path
+        return self._capture_at(path, exposure_time, gain, awbgains)
 
     def take_hdr(self, path, AEB, AEB_stops, exposure_time, gain, awbgains):
         """Capture an HDR bracket by **shutter only** (constant gain).
@@ -222,13 +241,9 @@ class Camera:
         for step in range(-AEB, AEB + 1):
             # shutter-only bracket: gain constant, exposure scales per stop
             hdr_exposure_time = exposure_time * (stop_multiplier ** -step)
-
-            self._set_manual(hdr_exposure_time, gain, awbgains)
-            # set_controls applies to the NEXT frame — sync so the saved frame
-            # really carries this exposure (also drains the startup auto frame)
-            self._sync_to(hdr_exposure_time)
             hdr_path = f"{path_split[0]}_{step * AEB_stops}{path_split[1]}"
-            self.camera.capture_file(hdr_path)
+            # capture-and-verify so the saved frame carries this exposure
+            self._capture_at(hdr_path, hdr_exposure_time, gain, awbgains)
             paths.append(hdr_path)
 
         return paths
