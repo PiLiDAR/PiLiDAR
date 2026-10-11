@@ -93,6 +93,7 @@ overall progress. The scan files are world-readable, so no `sudo` is needed.)
 | Setup: Python env, GPIO, UART, PWM, Hugin, MeshLab, USB power | [docs/setup.md](docs/setup.md) |
 | Bill of materials, wiring, LiDAR specs, 3D printing | [docs/hardware.md](docs/hardware.md) |
 | Serial protocol, visualization, USB scan dumping | [docs/protocol.md](docs/protocol.md) |
+| IMU gravity leveling (frames, method, open issues) | [docs/imu_leveling.md](docs/imu_leveling.md) |
 | Troubleshooting & references | [docs/troubleshooting.md](docs/troubleshooting.md) |
 | Project roadmap (phases 0–6) | [docs/roadmap.md](docs/roadmap.md) |
 | Change history | [CHANGELOG.md](CHANGELOG.md) |

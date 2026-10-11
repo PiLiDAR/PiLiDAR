@@ -1,3 +1,37 @@
+"""
+IMU orientation utilities (MPU6050 / DMP quaternions).
+
+Three loosely-coupled parts:
+
+1. **Quaternion helpers** — ``DMP_get_euler`` / ``DMP_get_roll_pitch_yaw`` and
+   the :class:`Orientation` wrapper convert the DMP int16 wxyz quaternions
+   (unit norm ~16384) into euler / roll-pitch-yaw angles. (Near the 90° pitch
+   singularity these are ill-conditioned — prefer the vector methods below.)
+
+2. **Turntable-axis fit** — :func:`fit_turntable_axis` recovers the turntable's
+   rotation axis from a sweep's quaternions two independent ways: the common axis
+   of the incremental rotations (body + gravity-referenced world frames) and a
+   gravity-cone plane fit. This is the basis for the scanner "up".
+
+3. **Leveling** — turns a measured "up" into a rotation that levels the assembled
+   point cloud (see ``docs/imu_leveling.md``).
+
+Coordinate frames
+-----------------
+- **IMU body**: X = left, Y = up, Z = forward (as mounted on the scanner).
+- **DMP world**: gravity-referenced, +Z = up (accel/gyro fused; yaw drifts).
+- **Cloud/scanner**: +Z = turntable axis; the cloud is assembled in this frame by
+  ``lib/pointcloud.py`` and is *level by construction only if the rig is level*.
+
+The IMU sits on the rotating platform, so its quaternions describe a rotation
+about the turntable axis. The constant **IMU -> cloud mounting rotation** is
+calibration data and lives in ``config.json`` as ``IMU.MOUNTING`` (there is no
+in-code default); see :func:`mounting_matrix`.
+
+Units: DMP quaternions are int16 with a unit norm of 16384; functions take a
+``scale`` (default 16384) to normalize. Angles are radians unless named ``_deg``.
+"""
+
 import open3d as o3d
 import numpy as np
 try:
