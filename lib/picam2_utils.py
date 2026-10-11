@@ -121,6 +121,24 @@ class Camera:
         frame reflects the manual controls we set."""
         self.camera.capture_array()
 
+    def _sync_to(self, exposure_time, tolerance=0.02, attempts=12):
+        """Block until the sensor reports the requested exposure.
+
+        ``set_controls()`` only takes effect on the *next* captured frame, so a
+        ``capture_file()`` issued right after it can still save the previous
+        frame's exposure. This drains frames (via ``capture_metadata()``) until
+        the reported ``ExposureTime`` matches ``exposure_time`` (within
+        ``tolerance``, i.e. 2%, or 1 ms), so the subsequently saved frame really
+        carries the exposure we asked for.
+        """
+        want_ns = _ns(exposure_time)
+        slack = max(1_000_000, want_ns * tolerance)     # >= 1 ms or `tolerance`
+        for _ in range(attempts):
+            meta = self.camera.capture_metadata()
+            if abs(meta["ExposureTime"] - want_ns) <= slack:
+                return True
+        return False
+
     def _set_manual(self, exposure_time, gain, awbgains):
         """Apply manual exposure / gain / white-balance to the sensor.
 
@@ -179,14 +197,18 @@ class Camera:
         self.camera.capture_file(path)
         return path
 
-    def take_hdr(self, path, AEB, AEB_stops, exposure_time, gain, awbgains, max_exposure=1.0):
+    def take_hdr(self, path, AEB, AEB_stops, exposure_time, gain, awbgains):
         """Capture an HDR bracket by **shutter only** (constant gain).
 
         The rig is stationary while shooting the panorama, so every frame is a
         long exposure and there is no motion blur to trade against — bracketing
         by shutter keeps the ISO low (hence low noise). The gain stays at the
         calibrated (base) value for every frame; negative EV steps lengthen the
-        exposure and positive EV steps shorten it, clamped to ``max_exposure``.
+        exposure and positive EV steps shorten it. The [ISO 100 vs 200] choice
+        and any exposure ceiling are handled in ``estimate_parameters()`` (see
+        ``choose_gain_exposure``); here the exposures simply scale from the
+        chosen base, however long that is.
+
         Filenames carry the EV offset (``..._<ev>.jpg``) so the Hugin reorder
         step can match them to the template's per-angle EV order.
         """
@@ -198,13 +220,13 @@ class Camera:
         self._lock_3a()
 
         for step in range(-AEB, AEB + 1):
+            # shutter-only bracket: gain constant, exposure scales per stop
             hdr_exposure_time = exposure_time * (stop_multiplier ** -step)
-            if max_exposure:
-                hdr_exposure_time = min(hdr_exposure_time, max_exposure)
 
             self._set_manual(hdr_exposure_time, gain, awbgains)
-            if step == -AEB:
-                self._flush()  # drop the startup auto-mode frame once
+            # set_controls applies to the NEXT frame — sync so the saved frame
+            # really carries this exposure (also drains the startup auto frame)
+            self._sync_to(hdr_exposure_time)
             hdr_path = f"{path_split[0]}_{step * AEB_stops}{path_split[1]}"
             self.camera.capture_file(hdr_path)
             paths.append(hdr_path)
