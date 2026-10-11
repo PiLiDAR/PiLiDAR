@@ -39,6 +39,18 @@ def test_open_container_roundtrip(tmp_path):
     assert os.path.exists(str(tmp_path / "rt_lidar.npz"))
     assert os.path.exists(str(tmp_path / "rt_lidar.json"))
 
+    # the sidecar schema must describe the arrays that were actually written
+    import json
+
+    meta = json.load(open(str(tmp_path / "rt_lidar.json")))
+    with np.load(str(tmp_path / "rt_lidar.npz")) as npz:
+        for name, arr in npz.items():
+            assert meta["arrays"][name].startswith(str(arr.dtype))
+            assert str(list(arr.shape)) in meta["arrays"][name]
+    assert meta["n_planes"] == 3
+    assert meta["n_quaternions"] == 3
+    assert meta["warmup_quaternion_extra"] == 0
+
     loaded = load_raw_scan(path)
     assert loaded["header"]["scan_id"] == "rt"
     assert np.allclose(loaded["z_angles"], [0.0, 90.0, 180.0])

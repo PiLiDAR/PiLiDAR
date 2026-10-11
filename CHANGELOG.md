@@ -3,6 +3,13 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.2] - 2026-10-12
+
+### Fixed
+- **Raw-scan sidecar was lying about the data.** `_write_metadata()` wrote a **hardcoded** array schema that did not match what was saved: it claimed `quaternions: int16 [n_planes, 4]` while the `.npz` actually held `int64 [n_planes+1, 4]`. The schema is now derived from the **actual** arrays (`<dtype> [<shape>]`), so it can never drift. Quaternions are now stored as **int16** (the DMP's native type; `np.asarray` had promoted the Python ints to int64).
+- Added `n_quaternions` and `warmup_quaternion_extra` (= `len(quaternions) - n_planes`, i.e. the dropped warm-up plane's extra leading sample) to the sidecar, so the off-by-one is explicit rather than surprising.
+- Regenerated the local scans' containers; test now asserts the sidecar schema matches the arrays.
+
 ## [2.6.1] - 2026-10-12
 
 ### Added

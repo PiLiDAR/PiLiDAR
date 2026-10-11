@@ -59,10 +59,12 @@ def save_raw_scan(path, data):
     if data.get("angular") is not None:
         arrays["angular"] = np.asarray(data["angular"])
     if quats is not None:
-        arrays["quaternions"] = np.asarray(quats)
+        # DMP quaternions are int16 (unit norm ~16384); keep that dtype rather
+        # than letting np.asarray promote the Python ints to int64
+        arrays["quaternions"] = np.asarray(quats, dtype=np.int16)
 
     np.savez_compressed(base + ".npz", **arrays)
-    _write_metadata(base + ".json", data, cartesian)
+    _write_metadata(base + ".json", data, cartesian, arrays)
 
 
 def _stack_cartesian(cartesian):
@@ -92,22 +94,31 @@ def _unstack_cartesian(arr):
     return [arr[idx == i, 1:] for i in range(idx.max() + 1)]
 
 
-def _write_metadata(path, data, cartesian):
+def _write_metadata(path, data, cartesian, arrays):
     meta = dict(data.get("header") or {})
     meta["format"] = "pilidar-raw"
     meta["version"] = 1
-    meta["arrays"] = {
-        "z_angles": "float64 [n_planes]",
-        "cartesian": "float64 [n_points, cols+1]  (col 0 = plane index)",
-        "quaternions": "int16 [n_planes, 4] wxyz (optional)",
-    }
+
+    # the array schema actually written (dtype + shape), so the sidecar never
+    # claims something the .npz does not contain
+    schema = {name: f"{arr.dtype} {list(arr.shape)}" for name, arr in arrays.items()}
+    if "cartesian" in schema:
+        schema["cartesian"] += "  (col 0 = plane index; rows = n_points)"
+    meta["arrays"] = schema
+
     meta["n_planes"] = len(cartesian)
     meta["n_points"] = int(sum(len(np.asarray(c)) for c in cartesian))
     if "z_angles" in data and data["z_angles"] is not None and len(data["z_angles"]):
         za = np.asarray(data["z_angles"], dtype=float)
         meta["angle_min_deg"] = float(za.min())
         meta["angle_max_deg"] = float(za.max())
-    meta["has_quaternions"] = data.get("quaternions") is not None
+    if "quaternions" in arrays:
+        meta["has_quaternions"] = True
+        meta["n_quaternions"] = int(len(arrays["quaternions"]))
+        # the IMU also samples the dropped warm-up plane -> one extra leading quat
+        meta["warmup_quaternion_extra"] = int(len(arrays["quaternions"]) - len(cartesian))
+    else:
+        meta["has_quaternions"] = False
     with open(path, "w") as f:
         json.dump(meta, f, indent=2, default=str)
 
