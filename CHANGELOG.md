@@ -3,6 +3,19 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.5] - 2026-10-11
+
+### Added
+- **LiDAR USB power gating (`lib/usb_power.py`):** the STL27L is USB-powered behind a per-port-power-switching hub, so its VBUS can be cut while idle (fully off, motor stopped) instead of leaving it powered from boot. `PiLiDAR.py` powers the port on *before* `Config()` resolves the serial port (otherwise it falls back to `/dev/ttyS0`) and cuts it on exit; `gpio_interrupt.py` also cuts it if a scan process died before its own cleanup. Configured via a new `USB_POWER` block in `config.json` (`ENABLE`/`HUB`/`PORT`/`DELAY`). Uses `uhubctl -l <hub> -p <port> -a on/off -e` (the `-e` exact-location flag is required so only the target port switches). Replaces the obsolete LD06 power relay — the LD06 was a bare UART board switched by GPIO, the STL27L has its own USB controller. Verified on hardware: port off → `/dev/ttyUSB0` disappears; on → re-enumerates in ~4 s.
+- **`tests/test_usb_power.py`:** 3 tests for the config plumbing (defaults, missing block, disabled no-op) — suite now 33 tests.
+
+### Changed
+- **`docs/setup.md`:** the USB power-switching section corrected (the LiDAR is on hub `1-1` port 1, not USB-3 hub 2) and documents the automatic gating + `USB_POWER` config.
+- **`PiLiDAR.py`:** replaced the vestigial LD06-relay comments with the USB power-off call; ASCII banner made a raw string (clears escape-sequence warnings).
+
+### Notes
+- **Motor idle power (A4988 `/EN`):** postponed — the A4988 holding current/holding-lock while idle is a real issue but the fix needs a hardware change (route `/EN` to a free GPIO; the freed relay pin GPIO24 is a candidate) and cannot be done today without making the rig unusable.
+
 ## [2.5.4] - 2026-10-11
 
 ### Added

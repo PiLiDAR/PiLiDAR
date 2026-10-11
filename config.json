@@ -11,7 +11,14 @@
     
     "SCANS_ROOT": "scans",
     "ANGULAR_DIGITS": 3,
-    
+
+    "USB_POWER": {
+        "ENABLE": true,
+        "HUB": "1-1",
+        "PORT": 1,
+        "DELAY": 5
+    },
+
     "LIDAR": {
         "DEVICE": "STL27L",
         "STL27L": {

@@ -11,15 +11,19 @@ import time
 
 import lgpio
 
+from lib import usb_power
+
 # # ENABLE USB POWER
 # subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "on"])
+
+# # DISABLE USB POWER
+# subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "off"])
+
 
 START_PIN   = 17
 VENV_PYTHON = "/home/pi/venv/bin/python"
 MAIN_SCRIPT = "/home/pi/PiLiDAR/PiLiDAR.py"
 
-# # DISABLE USB POWER
-# subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "off"])
 
 process = None
 
@@ -37,6 +41,9 @@ def start_callback(chip, gpio, level, tick):
             return
         else:
             print("Process has finished, return code:", return_code)
+            # the scan process powers the LiDAR off on exit too; this covers the
+            # case where it died before reaching its own cleanup
+            usb_power.lidar_off()
 
     # Start a new process with the main script at higher priority
     nice_value = -10
