@@ -72,3 +72,66 @@ def test_polar2cartesian_offset():
     # offset shifts the angle; distance magnitude is preserved
     x, y = Lidar.polar2cartesian([0.0], [1000.0], np.pi / 2)
     assert np.isclose(np.hypot(x[0], y[0]), 1000.0)
+
+
+def test_decode_arms_step_anchor_on_far_side(lidar):
+    lidar.step_at_angle = 50.0
+    # far side of the anchor (>180° past it) -> armed
+    lidar.decode(sample_packet(fsa_deg=250.0, lsa_deg=253.0))
+    assert lidar._crossing is True
+    # reset, then a frame just past the far side re-arms
+    lidar._crossing = False
+    lidar.decode(sample_packet(fsa_deg=240.0, lsa_deg=243.0))
+    assert lidar._crossing is True
+
+
+def test_decode_does_not_arm_near_anchor(lidar):
+    lidar.step_at_angle = 50.0
+    lidar._crossing = False
+    lidar.decode(sample_packet(fsa_deg=200.0, lsa_deg=203.0))  # only 150° past anchor
+    assert lidar._crossing is False
+
+
+def _set_angle(lidar, degrees):
+    lidar.angle_package = np.full(lidar.dlength, np.radians(degrees))
+
+
+def test_plane_complete_when_frame_full(lidar):
+    lidar.step_at_angle = None
+    lidar.out_i = lidar.out_len
+    assert lidar._plane_complete() is True
+    lidar.out_i = lidar.out_len - 1
+    assert lidar._plane_complete() is False
+
+
+def test_plane_complete_at_anchor_splits_early(lidar):
+    lidar.step_at_angle = 2.5
+    lidar.out_i = 2                          # far from a full frame (out_len=10)
+    lidar._crossing = True
+    _set_angle(lidar, 2.5)                   # frame starts at the anchor
+    assert lidar._plane_complete() is True
+
+
+def test_plane_complete_not_until_armed(lidar):
+    lidar.step_at_angle = 2.5
+    lidar.out_i = 2
+    lidar._crossing = False                  # not armed -> no early step
+    _set_angle(lidar, 2.5)
+    assert lidar._plane_complete() is False
+
+
+def test_finalize_plane_labels_captured_angle_and_clears_arm(lidar):
+    lidar.z_angle = 10.0
+    lidar.out_i = 3
+    lidar._crossing = True
+    lidar._finalize_plane()
+    assert lidar.z_angles == [10.0]          # captured angle, not the post-move one
+    assert lidar.cartesian_list[0].shape == (3 * lidar.dlength, 3)
+    assert lidar._crossing is False
+
+
+def test_finalize_plane_flushes_partial_plane(lidar):
+    lidar.z_angle = 0.0
+    lidar.out_i = 5                          # partial plane still gets flushed
+    lidar._finalize_plane()
+    assert lidar.cartesian_list[0].shape == (5 * lidar.dlength, 3)

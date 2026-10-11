@@ -38,6 +38,9 @@ def lidar():
     lidar.dtype = np.float32
     lidar.out_i = 0
     lidar.out_len = 10
+    # step-phase anchor: None -> blind packet-frame boundaries (legacy behaviour)
+    lidar.step_at_angle = None
+    lidar._crossing = False
     lidar.speeds = np.empty(lidar.out_len, dtype=lidar.dtype)
     lidar.timestamps = np.empty(lidar.out_len, dtype=lidar.dtype)
     lidar.points_2d = np.empty((lidar.out_len * lidar.dlength, 3), dtype=lidar.dtype)
@@ -46,6 +49,9 @@ def lidar():
     lidar.luminance_package = np.zeros(lidar.dlength)
     lidar.speed = 0
     lidar.timestamp = 0
+    lidar.visualization = None
+    lidar.z_angles = []
+    lidar.cartesian_list = []
     return lidar
 
 

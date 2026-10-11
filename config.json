@@ -29,6 +29,7 @@
             "OUT_LEN": 180,
             "QUEUE_SIZE": 1024,
             "OFFSET": 0,
+            "STEP_AT_ANGLE": 90,
             "PWM_COEFFS": null
         },
         "LD06": {
@@ -39,6 +40,7 @@
             "OUT_LEN": 40,
             "QUEUE_SIZE": 1024,
             "OFFSET": 0,
+            "STEP_AT_ANGLE": 90,
             "PWM_COEFFS": [33.3174, -0.8497]
         },
         "GPIO_SERIAL": {

@@ -19,6 +19,11 @@ import serial
 
 logger = logging.getLogger(__name__)
 
+# angular window (degrees) around STEP_AT_ANGLE that counts as "beam at the
+# anchor" -> step the turntable. The beam re-arms once it is >180° past the
+# anchor, so exactly one step happens per LiDAR revolution.
+_STEP_ANCHOR_TOL = 10.0
+
 # running from project root
 try:
     from lib.config import Config
@@ -49,6 +54,14 @@ class Lidar:
         self.deg2rad            = np.pi / 180
         self.offset             = config.get("LIDAR", config.DEVICE, "OFFSET")
         self.crc_table          = config.crc_table
+        # Stepper step phase: move the turntable when the beam crosses this LiDAR
+        # angle. With the vertical disc geometry (X,Z)=(-r cosθ, r sinθ) the point
+        # nearest the rotation axis is at θ≈90° (up) / 270° (down) — but since the
+        # LiDAR is offset from the axis (position_offset in merge_2D_points) the
+        # minimum-radius angle is not exactly 90°, so tune STEP_AT_ANGLE on the rig.
+        # None -> blind packet-frame boundaries (legacy behaviour).
+        self.step_at_angle      = config.get("LIDAR", config.DEVICE, "STEP_AT_ANGLE")
+        self._crossing          = False  # armed on the far side of the anchor angle
 
         # SERIAL
         # dmesg | grep "tty"
@@ -244,6 +257,34 @@ class Lidar:
         return None
 
 
+    def _plane_complete(self):
+        """True when the current plane should be finalised and the turntable stepped.
+
+        Full packet-frame (legacy) or the beam reaching the STEP_AT_ANGLE anchor.
+        The latter steps while the beam is near the rotation axis, where a point's
+        distance from the axis — and hence the motion smear — is smallest.
+        """
+        if self.out_i == self.out_len:
+            return True
+        if self.step_at_angle is None or not self._crossing or self.out_i == 0:
+            return False
+        # signed angular distance to the anchor, in [-180, 180) — avoids the
+        # (tiny_negative % 360) -> ~360 float trap
+        delta = (self.angle_package[0] / self.deg2rad - self.step_at_angle + 180) % 360 - 180
+        return bool(abs(delta) <= _STEP_ANCHOR_TOL)
+
+    def _finalize_plane(self):
+        """Append the current plane, labelled with the angle it was *captured* at.
+
+        Must run BEFORE the stepper moves (the callback advances ``z_angle`` for
+        the next plane) — otherwise each fan is tagged with the next angle and the
+        whole cloud is rotated by one step.
+        """
+        if self.out_i > 0:
+            self.z_angles.append(self.z_angle)
+            self.cartesian_list.append(np.copy(self.points_2d[:self.out_i * self.dlength]))
+        self._crossing = False
+
     def read_loop(self, callback=None, max_packages=None, digits=4):
         """Consume packets from the background reader until the sweep is done.
 
@@ -262,24 +303,22 @@ class Lidar:
         self.start_reader()
         try:
             while self.serial_connection.is_open and (max_packages is None or loop_count <= max_packages):
-                if self.out_i == self.out_len:
-                    if callback is not None:
-                        callback()
-
-                    # save the z_angle to list
-                    self.z_angles.append(self.z_angle)
+                if self._plane_complete():
+                    # finalise the plane FIRST (labelled with the captured angle),
+                    # then step the turntable via the callback
+                    self._finalize_plane()
 
                     if self.verbose:
                         print("speed:", round(self.speed, 2))
                         if self.z_angle is not None:
                             print("z_angle:", round(self.z_angle, 2))
 
-                    # Append 2D plane to cartesian list. copying avoids identical pointers
-                    self.cartesian_list.append(np.copy(self.points_2d))
-
                     # VISUALIZE
                     if self.visualization is not None:
                         self.visualization.update(self.points_2d)
+
+                    if callback is not None:
+                        callback()
 
                     self.out_i = 0
 
@@ -341,6 +380,12 @@ class Lidar:
         LSA = float(int.from_bytes(byte_array[42:44][::-1], 'big')) / 100       # end angle in degrees
         self.timestamp = int.from_bytes(byte_array[44:46][::-1], 'big')         # timestamp in milliseconds < 30000
         # CS = int.from_bytes(byte_array[46:47][::-1], 'big')                   # CRC Checksum, checked even before decoding
+
+        # arm the stepper-step phase anchor: once the beam is well past the
+        # anchor (>180°), the next crossing of it ends the plane and steps.
+        if self.step_at_angle is not None:
+            if (FSA - self.step_at_angle) % 360 > 180:
+                self._crossing = True
 
         angleStep = ((LSA - FSA) if LSA - FSA > 0 else (LSA + 360 - FSA)) / (self.dlength-1)
 
