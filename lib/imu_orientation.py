@@ -244,7 +244,16 @@ def reference_gravity(quaternions, z_angles=None, scale=16384.0, window_deg=2.0)
         k = min(len(g_body), 5)
         return _unit(g_body[:k].mean(axis=0))
 
-    z = np.asarray(z_angles, dtype=float)[:len(g_body)]
+    z = np.asarray(z_angles, dtype=float)
+    # The sweep samples one quaternion per plane, but the (dropped) warm-up plane
+    # is still sampled -- and at a STALE pre-sweep attitude. If there is one more
+    # quaternion than plane, drop the leading (warm-up) sample so the arrays align
+    # (the residual one-step lead is negligible for gravity).
+    if len(g_body) > len(z):
+        g_body = g_body[len(g_body) - len(z):]
+    n = min(len(g_body), len(z))
+    g_body = g_body[:n]
+    z = z[:n]
     ref = int(np.argmin(np.abs(z)))                # sample nearest 0 deg
     near = np.abs(((z - z[ref] + 180.0) % 360.0) - 180.0) <= window_deg
     return _unit(g_body[near].mean(axis=0))

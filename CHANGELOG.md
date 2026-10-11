@@ -3,6 +3,14 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.13] - 2026-10-11
+
+### Fixed
+- **`reference_gravity()` crashed when the sweep has one more quaternion than slices.** The dropped warm-up plane is still sampled by the IMU, so `quaternions` leads `z_angles` by one (and the extra leading sample is at the stale pre-sweep attitude). `reference_gravity()` now drops the leading excess sample before indexing, instead of raising `IndexError: boolean index did not match ...`. This aborted the 3D step (no `.ply`) on the first scan captured with quaternions + the warm-up fix (`261011-2329`).
+
+### Changed
+- **Re-solved `IMU.MOUNTING` on a tilted rig** (`261011-2329`, 18.4° tilt) with `experiments/calibrate_mounting.py`. The previous matrix was fit to the *old biased mean gravity* (~89° off the corrected gravity); the new one is consistent with `reference_gravity` (floor tilt after leveling **0.10°**, down from the earlier partial `6°`/`4.2°`).
+
 ## [2.5.12] - 2026-10-11
 
 ### Fixed

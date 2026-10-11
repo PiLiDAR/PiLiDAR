@@ -184,6 +184,23 @@ def test_reference_gravity_falls_back_to_first_sample_without_angles():
     assert _angle_deg(reference_gravity(wxyz), g_true) < 0.5
 
 
+def test_reference_gravity_drops_extra_leading_warmup_quaternion():
+    from lib.imu_orientation import reference_gravity
+
+    c_body = np.array([1.0, 0.0, 0.0])
+    axis_world = np.array([0.0, np.sin(np.radians(9.0)), np.cos(np.radians(9.0))])
+    wxyz, z_deg, mount = _synthesise_sweep(axis_world, c_body)
+    g_true = mount.inv().apply([0.0, 0.0, 1.0])
+
+    # the sweep records one quaternion for the (dropped) warm-up plane, at a stale
+    # attitude -> quats leads z_angles by one; reference_gravity must drop it
+    stale = np.array([[16384.0, 0.0, 0.0, 0.0]])
+    wxyz_ext = np.vstack([stale, wxyz])
+    assert len(wxyz_ext) == len(z_deg) + 1
+
+    assert _angle_deg(reference_gravity(wxyz_ext, z_angles=z_deg), g_true) < 0.5
+
+
 def test_solve_mounting_maps_axis_and_gravity():
     from lib.imu_orientation import solve_mounting
 
