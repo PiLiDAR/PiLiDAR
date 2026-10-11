@@ -10,10 +10,10 @@ from scipy.spatial.transform import Rotation as R
 import pickle
 
 try:
-    from lib.imu_orientation import Orientation, cloud_up_vector, leveling_rotation
+    from lib.imu_orientation import Orientation, cloud_up_vector, leveling_rotation, mounting_matrix
 except Exception:
     try:
-        from imu_orientation import Orientation, cloud_up_vector, leveling_rotation
+        from imu_orientation import Orientation, cloud_up_vector, leveling_rotation, mounting_matrix
     except Exception:
         Orientation = None
 
@@ -110,7 +110,7 @@ def process_raw(config, save=True):
 
         # IMU data -> up vector in the cloud frame (for leveling at the end)
         if "quaternions" in raw_scan and config.get("IMU", "LEVEL"):
-            imu_up = cloud_up_vector(raw_scan["quaternions"])
+            imu_up = cloud_up_vector(raw_scan["quaternions"], mounting=mounting_matrix(config))
             print(f"\nIMU: {len(raw_scan['quaternions'])} samples; "
                   f"up in cloud frame = {np.round(imu_up, 3).tolist()}")
 

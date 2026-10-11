@@ -92,7 +92,10 @@
         "i2c_bus": 6, 
         "device_address": 104,
         "frequency": 50,
-        "LEVEL": true
+        "LEVEL": true,
+        "MOUNTING": [[-0.1042, -0.0445, 0.9936],
+                     [ 0.9945,  0.0000, 0.1043],
+                     [-0.0046,  0.9990, 0.0443]]
     }, 
 
     "PANO": {

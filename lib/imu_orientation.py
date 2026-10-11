@@ -181,24 +181,36 @@ def leveling_rotation(up_vector):
     return R.align_vectors([_WORLD_UP], [up])[0]
 
 
-# IMU -> scanner/cloud mounting, calibrated from scans (2026-10-11, scans
-# 261011-1953 level + 261011-2031 tilted ~11 deg): the rotation that maps the
-# IMU body frame onto the cloud frame, solved from two vector correspondences
-# (turntable axis c_body -> cloud +Z, gravity g_body -> the floor normal). It
-# replaces a hand-guessed permutation; without it the tilt direction came out
-# ~90 deg off in azimuth and leveling did not work. See tests/test_imu_axis.py.
-_IMU_TO_CLOUD = np.array([[-0.1042, -0.0445, 0.9936],
-                          [0.9945, 0.0000, 0.1043],
-                          [-0.0046, 0.9990, 0.0443]])
+# IMU -> scanner/cloud mounting (`IMU.MOUNTING` in config.json), calibrated from
+# scans (2026-10-11, scans 261011-1953 level + 261011-2031 tilted ~11 deg): the
+# rotation that maps the IMU body frame onto the cloud frame, solved from two
+# vector correspondences (turntable axis c_body -> cloud +Z, gravity g_body ->
+# the floor normal). It replaces a hand-guessed permutation; without it the tilt
+# direction came out ~90 deg off in azimuth and leveling did not work. See
+# tests/test_imu_axis.py and docs/imu_leveling.md.
+_DEFAULT_MOUNTING = np.array([[-0.1042, -0.0445, 0.9936],
+                              [0.9945, 0.0000, 0.1043],
+                              [-0.0046, 0.9990, 0.0443]])
 
 
-def cloud_up_vector(quaternions, scale=16384.0):
+def mounting_matrix(config=None):
+    """IMU -> cloud mounting rotation (3x3), from ``IMU.MOUNTING`` or the default."""
+    if config is not None:
+        try:
+            return np.asarray(config.get("IMU", "MOUNTING"), dtype=float)
+        except Exception:
+            pass
+    return _DEFAULT_MOUNTING
+
+
+def cloud_up_vector(quaternions, mounting=None, scale=16384.0):
     """Gravity direction (scanner up) expressed in the cloud/scanner frame.
 
     Maps the measured gravity (``imu_up_vector``) into the cloud frame via the
-    calibrated mounting, ready for :func:`leveling_rotation`.
+    mounting, ready for :func:`leveling_rotation`.
     """
-    return _IMU_TO_CLOUD @ imu_up_vector(quaternions, scale=scale)
+    m = _DEFAULT_MOUNTING if mounting is None else np.asarray(mounting, dtype=float)
+    return m @ imu_up_vector(quaternions, scale=scale)
 
 
 if __name__ == '__main__':
