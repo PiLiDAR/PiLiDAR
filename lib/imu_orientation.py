@@ -153,6 +153,33 @@ class Orientation:
             rpy = rad2deg(rpy)
         return rpy
 
+# ---------------------------------------------------------------------------
+# up-vector and leveling
+# ---------------------------------------------------------------------------
+
+# gravity in the DMP's gravity-referenced world frame (its Z axis is up)
+_WORLD_UP = np.array([0.0, 0.0, 1.0])
+
+
+def imu_up_vector(quaternions, scale=16384.0):
+    """Scanner up-axis (the turntable axis) in the IMU body frame.
+
+    The mean of the per-sample gravity directions (``R^T @ world_up``); drift-free
+    and already the axis projection for a level rig. For a strongly tilted rig
+    prefer ``fit_turntable_axis(...).c_body`` (the incremental-rotation estimate).
+    """
+    q = np.asarray(quaternions, dtype=float) / scale
+    q /= np.linalg.norm(q, axis=1, keepdims=True)
+    g_body = R.from_quat(q[:, [1, 2, 3, 0]]).as_matrix()[:, 2, :]
+    return _unit(g_body.mean(axis=0))
+
+
+def leveling_rotation(up_vector):
+    """Rotation that levels the cloud: map ``up_vector`` (the scanner's up, in
+    whatever frame the cloud shares) onto the world up ``(0,0,1)``."""
+    up = _unit(np.asarray(up_vector, dtype=float))
+    return R.align_vectors([_WORLD_UP], [up])[0]
+
 
 if __name__ == '__main__':
 

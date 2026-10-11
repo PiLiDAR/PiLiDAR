@@ -6,7 +6,7 @@ recovers it, in both the body and world frames.
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
-from lib.imu_orientation import fit_turntable_axis
+from lib.imu_orientation import fit_turntable_axis, imu_up_vector, leveling_rotation
 
 
 def _synthesise(axis_world, c_body, n=400, tilt_from=0.0, tilt_to=np.pi):
@@ -69,3 +69,21 @@ def test_accel_axis_for_level_rig_is_gravity_direction():
 
     fit = fit_turntable_axis(_synthesise(axis_world, c_body))
     assert np.isclose(abs(np.dot(fit.c_body, fit.c_body_accel)), 1.0, atol=1e-3)
+
+
+def test_imu_up_vector_recovers_gravity_direction():
+    # a static IMU whose body up is tilted: gravity in body should be found
+    c_body = np.array([0.1, -0.3, 0.95])
+    c_body /= np.linalg.norm(c_body)
+    axis_world = np.array([0.0, 0.0, 1.0])
+    quats = _synthesise(axis_world, c_body, n=50, tilt_from=0.0, tilt_to=0.0)
+
+    up = imu_up_vector(quats)
+    assert np.isclose(abs(np.dot(up, c_body)), 1.0, atol=1e-6)
+
+
+def test_leveling_rotation_maps_up_to_world_z():
+    up = np.array([0.2, -0.1, 0.97])
+    up /= np.linalg.norm(up)
+    rot = leveling_rotation(up)
+    assert np.allclose(rot.apply(up), [0, 0, 1], atol=1e-6)
