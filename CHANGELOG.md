@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pi 4 USB power: whole-hub only.** On the Pi 4 the USB-A switch is in the VL805 (bus 2) and *only whole-hub* switching actually cuts power: `sudo uhubctl -l 2 -a 0` (off) / `-a 1` (on). Per-port (`-p`) and exact-location (`-e`) flags only drop the USB *data* link — the LiDAR keeps running (confirmed: blue LED stays on while the CP210x disappears from the bus). The trade-off is that the whole-hub cut powers down **all four USB-A ports** (blue 3.0 and black 2.0 alike), so nothing that must stay powered during the idle window should sit on USB-A. A per-device switch (the freed relay pin GPIO24, or a MOSFET) would remove that limitation once rewired.
 - **Motor idle power (A4988 `/EN`):** postponed — the A4988 holding current/holding-lock while idle is a real issue but the fix needs a hardware change (route `/EN` to a free GPIO; the freed relay pin GPIO24 is a candidate) and cannot be done today without making the rig unusable.
 
+### Fixed
+- **`Config.gpio_setup()` aborting the scan on a busy GPIO (`lib/config.py`):** `lgpio.gpio_claim_output()` *raises* `lgpio.error` when a pin is already claimed (e.g. a second PiLiDAR instance or a still-running scan), and the old code only caught `ImportError`/`RuntimeError` — so a busy relay pin crashed `Config()` at startup. It now catches `lgpio.error` (best-effort `gpio_write`) and any failure is a warning, never fatal.
+- **`lidar_on()` resolved the serial device before power-on (`lib/usb_power.py`):** the stable `/dev/serial/by-id` link only exists while the LiDAR is powered, so resolving it first fell back to `/dev/ttyUSB0` and then timed out (the re-powered device actually appears as `ttyUSB1`). The device is now resolved *after* power-on.
+
 ## [2.5.4] - 2026-10-11
 
 ### Added

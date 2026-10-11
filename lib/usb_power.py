@@ -83,10 +83,10 @@ def load_settings(config_path=CONFIG_PATH):
         "enabled": bool(usb.get("ENABLE", False)),
         "hub": usb.get("HUB", "2"),
         "delay": usb.get("DELAY", 5),
-        "device": resolve_serial_device(
-            device_cfg.get("PORT", "/dev/ttyUSB0"),
-            device_cfg.get("PORT_BY_ID"),
-        ),
+        # raw port + by-id glob; the device is resolved after power-on, since the
+        # stable by-id link only exists while the LiDAR is powered
+        "port": device_cfg.get("PORT", "/dev/ttyUSB0"),
+        "port_by_id": device_cfg.get("PORT_BY_ID"),
     }
 
 
@@ -126,18 +126,25 @@ def lidar_on(settings=None):
     """Power the LiDAR USB hub on, wait for it to enumerate, and settle.
 
     Call this before constructing :class:`lib.config.Config` so the serial port
-    resolves correctly. Returns True if switched on.
+    resolves correctly. The device path is resolved *after* power-on, since the
+    stable ``/dev/serial/by-id`` link only exists while the LiDAR is powered.
+    Returns True if switched on.
     """
     s = settings or load_settings()
     if not s["enabled"]:
         return False
     if not _switch("on", s["hub"]):
         return False
-    if not _wait_for_device(s["device"]):
-        logger.warning("LiDAR device %s did not appear after power on", s["device"])
+    # resolve the device now (by-id link exists only while powered)
+    device = resolve_serial_device(
+        s.get("port", "/dev/ttyUSB0"),
+        s.get("port_by_id"),
+    )
+    if not _wait_for_device(device):
+        logger.warning("LiDAR device %s did not appear after power on", device)
         return False
     time.sleep(s["delay"])  # controller boot + motor spin-up
-    logger.info("LiDAR USB power on (hub %s)", s["hub"])
+    logger.info("LiDAR USB power on (hub %s, %s)", s["hub"], device)
     return True
 
 

@@ -10,10 +10,10 @@ from lib import usb_power
 
 def test_load_settings_reads_project_config():
     s = usb_power.load_settings()
-    assert set(s) == {"enabled", "hub", "delay", "device"}
+    assert set(s) == {"enabled", "hub", "delay", "port", "port_by_id"}
     assert s["hub"] == "2"            # Pi 4: whole-hub switching on the VL805
-    # device prefers the stable by-id path when it exists
-    assert s["device"].startswith("/dev/serial/by-id/") or s["device"] == "/dev/ttyUSB0"
+    assert s["port"] == "/dev/ttyUSB0"
+    assert s["port_by_id"]            # configured stable by-id glob
 
 
 def test_load_settings_defaults_when_block_missing(tmp_path):
@@ -24,7 +24,8 @@ def test_load_settings_defaults_when_block_missing(tmp_path):
     assert s["enabled"] is False      # no USB_POWER block -> disabled
     assert s["hub"] == "2"            # sane defaults
     assert s["delay"] == 5
-    assert s["device"] == "/dev/ttyUSB9"  # no PORT_BY_ID -> raw port
+    assert s["port"] == "/dev/ttyUSB9"  # raw port
+    assert s["port_by_id"] is None      # no PORT_BY_ID configured
 
 
 def test_resolve_serial_device_prefers_by_id(monkeypatch):
@@ -49,7 +50,7 @@ def test_lidar_on_noop_when_disabled(monkeypatch):
     called = {"n": 0}
     monkeypatch.setattr(usb_power, "_switch", lambda *a, **k: called.__setitem__("n", called["n"] + 1))
 
-    s = {"enabled": False, "hub": "2", "delay": 0, "device": "/dev/null"}
+    s = {"enabled": False, "hub": "2", "delay": 0, "port": "/dev/null", "port_by_id": None}
     assert usb_power.lidar_on(s) is False
     assert usb_power.lidar_off(s) is False
     assert called["n"] == 0

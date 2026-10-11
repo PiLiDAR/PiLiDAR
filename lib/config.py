@@ -222,15 +222,16 @@ class Config:
             if handle < 0:
                 raise RuntimeError(f"could not open gpiochip 0 ({lgpio.error_text(handle)})")
 
-            # power relay
+            # power relay (vestigial: LiDAR power is now switched over USB, see
+            # lib/usb_power.py; kept for the legacy relay wiring)
             relay_pin = self.get("STEPPER", "RELAY_PIN")
-            err = lgpio.gpio_claim_output(handle, relay_pin, 0)
-            if err < 0:
-                # already claimed by us (e.g. Config() re-init) -> just set it low
-                err = lgpio.gpio_write(handle, relay_pin, 0)
-            if err < 0:
-                raise RuntimeError(f"could not claim/write GPIO {relay_pin} ({lgpio.error_text(err)})")
-        except (ImportError, RuntimeError) as e:
+            try:
+                lgpio.gpio_claim_output(handle, relay_pin, 0)
+            except lgpio.error:
+                # already claimed (e.g. another PiLiDAR instance) -> best-effort
+                lgpio.gpio_write(handle, relay_pin, 0)
+        except Exception as e:
+            # never let GPIO setup abort a scan — warn and continue
             print(f"[WARNING] GPIO setup skipped: {e}")
 
 
