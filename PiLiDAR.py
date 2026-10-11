@@ -1,3 +1,5 @@
+import atexit
+import signal
 from time import sleep
 import os
 
@@ -23,9 +25,16 @@ print(r'''
 
 # Power the LiDAR USB port on BEFORE Config() resolves the serial port: if the
 # LiDAR VBUS is cut (idle), the port is absent and Config falls back to /dev/ttyS0.
-lidar_usb_powered = False
-if get_platform() == 'RaspberryPi':
-    lidar_usb_powered = usb_power.lidar_on()
+# The power-off is registered with atexit so it runs on *any* exit; SIGTERM is
+# converted to SystemExit so the finally/atexit handlers still run (systemd stop).
+def _on_terminate(signum, frame):
+    raise SystemExit(128 + signum)
+
+
+if get_platform() == 'RaspberryPi' and usb_power.load_settings()["enabled"]:
+    usb_power.lidar_on()
+    atexit.register(usb_power.lidar_off)
+    signal.signal(signal.SIGTERM, _on_terminate)
 
 config = Config()
 config.init()
@@ -147,10 +156,9 @@ finally:
 
     stepper.close()
 
-    # Cut LiDAR USB power (fully off while idle). The old LD06 power relay is
-    # obsolete: the STL27L is USB-powered, see lib/usb_power.py.
-    if lidar_usb_powered:
-        usb_power.lidar_off()
+# Cut LiDAR USB power (fully off while idle) — registered with atexit above so it
+# runs on normal exit, on an exception, and on SIGTERM/systemd stop. The old LD06
+# power relay is obsolete: the STL27L is USB-powered, see lib/usb_power.py.
 
 
 # STITCHING PROCESS
