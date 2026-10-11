@@ -1,11 +1,11 @@
-"""Validate: is the turntable's up-axis recoverable from IMU quaternions?
+"""Log one IMU quaternion per LiDAR plane during a real sweep.
 
-Rotates the stepper in steps and samples the MPU6050 after each, then computes
-the incremental-rotation axis between consecutive samples. If the IMU is on the
-rotating turntable, every incremental axis should be the same axis (the
-turntable's up), regardless of orientation/mounting.
+Mirrors the scan loop (read_loop at every plane boundary) but instead of moving
+the stepper it just records the IMU quaternion, so we can fit the turntable axis
+from a full sweep and cross-check the incremental-rotation and gravity methods.
 
 Run on the Pi:  ~/venv/bin/python experiments/up_vector_probe.py
+Writes:         /tmp/up_vector_probe.npz  (quaternions, z_angles)
 """
 import os
 import sys
@@ -14,69 +14,63 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np  # noqa: E402
-from scipy.spatial.transform import Rotation as R  # noqa: E402
 
 from lib.config import Config  # noqa: E402
 from lib.imu_driver import MPU6050Wrapper  # noqa: E402
-from lib.a4988_driver import A4988  # noqa: E402
+from lib.lidar_driver import Lidar  # noqa: E402
+from lib import usb_power  # noqa: E402
+from lib.imu_orientation import fit_turntable_axis  # noqa: E402
 
-N = 12          # samples
-STEP_DEG = 10   # degrees per move
+OUT = "/tmp/up_vector_probe.npz"
+MAX_PLANES = 200      # stop early; we don't move the stepper
+
+STOP = False
 
 
 def main():
+    if not usb_power.lidar_on():
+        print("could not power the LiDAR")
+        return
+
     config = Config()
-    config.raw_path = None
+    config.init(scan_id="_probe")
 
     imu = MPU6050Wrapper(config.get("IMU", "i2c_bus"), config.get("IMU", "device_address"),
                          config.get("IMU", "frequency"))
-    stepper = A4988(config.get("STEPPER", "pins", "DIR_PIN"),
-                    config.get("STEPPER", "pins", "STEP_PIN"),
-                    config.get("STEPPER", "pins", "MS_PINS"),
-                    delay=config.get("STEPPER", "STEP_DELAY"),
-                    step_angle=config.get("STEPPER", "STEP_ANGLE"),
-                    microsteps=config.get("STEPPER", "MICROSTEPS"),
-                    gear_ratio=config.get("STEPPER", "GEAR_RATIO"))
+    time.sleep(0.5)
+    lidar = Lidar(config, visualization=None)
+    lidar.step_at_angle = None            # plain full revolutions
 
-    quats = []
+    quats, angles = [], []
+    lidar.start_reader()
     try:
-        time.sleep(0.5)
-        for i in range(N):
-            quats.append(imu.get_quat_values().astype(float))
-            stepper.move_angle(STEP_DEG)
-            time.sleep(1.0)
+        planes = 0
+        while planes < MAX_PLANES:
+            if lidar.out_i >= lidar.out_len:
+                quats.append(imu.get_quat_values())
+                angles.append(round(float(np.degrees(lidar.angle_package[0])), 2))
+                lidar.out_i = 0
+                planes += 1
+            if lidar.read_from_queue(timeout=1.0):
+                lidar.out_i += 1
     finally:
-        stepper.close()
+        lidar.stop_reader()
+        lidar.serial_connection.close()
         imu.close()
+        usb_power.lidar_off()
 
-    quats = np.array(quats)
-    # driver returns raw int16 DMP quaternions; scale to unit (and xyzw for scipy)
-    quats = quats / 16384.0
-    print("quat magnitudes:", np.round(np.linalg.norm(quats, axis=1), 3))
-    rots = R.from_quat(quats[:, [1, 2, 3, 0]])
+    quats = np.array(quats, dtype=float)
+    np.savez(OUT, quaternions=quats, z_angles=np.array(angles))
+    print(f"logged {len(quats)} quaternion samples -> {OUT}")
 
-    print(f"{len(quats)} samples, {STEP_DEG} deg/step")
-    print("incremental rotation axis (should be constant = up):")
-    axes = []
-    for i in range(len(rots) - 1):
-        rel = rots[i].inv() * rots[i + 1]
-        rotvec = rel.as_rotvec()
-        ang = np.degrees(np.linalg.norm(rotvec))
-        axis = rotvec / np.linalg.norm(rotvec)
-        axes.append(axis)
-        print(f"  {i:2d}->{i+1:2d}: angle={ang:6.2f} deg  axis=[{axis[0]:+.3f} {axis[1]:+.3f} {axis[2]:+.3f}]")
-
-    axes = np.array(axes)
-    mean_axis = axes.mean(0)
-    mean_axis /= np.linalg.norm(mean_axis)
-    # sign-align before averaging consistency check
-    aligned = np.array([a if np.dot(a, mean_axis) > 0 else -a for a in axes])
-    mean_axis = aligned.mean(0)
-    mean_axis /= np.linalg.norm(mean_axis)
-    spread = np.degrees(np.arccos(np.clip(aligned @ mean_axis, -1, 1)))
-    print(f"\nmean up axis (IMU frame): [{mean_axis[0]:+.4f} {mean_axis[1]:+.4f} {mean_axis[2]:+.4f}]")
-    print(f"axis spread (deg): max={spread.max():.2f}  mean={spread.mean():.2f}  std={spread.std():.2f}")
-    print(f"per-step rotation angle: mean={np.degrees([np.linalg.norm(r.as_rotvec()) for r in (rots[i].inv()*rots[i+1] for i in range(len(rots)-1))]).mean():.2f} deg")
+    fit = fit_turntable_axis(quats)
+    print("turntable axis fit:")
+    print(f"  c_body        = [{fit.c_body[0]:+.4f} {fit.c_body[1]:+.4f} {fit.c_body[2]:+.4f}]")
+    print(f"  c_body_accel  = [{fit.c_body_accel[0]:+.4f} {fit.c_body_accel[1]:+.4f} {fit.c_body_accel[2]:+.4f}]")
+    print(f"  w_world       = [{fit.w_world[0]:+.4f} {fit.w_world[1]:+.4f} {fit.w_world[2]:+.4f}]")
+    print(f"  |c_body.c_accel| = {abs(np.dot(fit.c_body, fit.c_body_accel)):.4f}  (1.0 = agree)")
+    print(f"  tilt_deg = {fit.tilt_deg:.2f}  spread_deg = {fit.spread_deg:.3f}  step_deg = {fit.step_deg:.4f}  n = {fit.n}")
+    print(f"  z_angles span: {angles[0]:.1f}..{angles[-1]:.1f} deg")
 
 
 if __name__ == "__main__":

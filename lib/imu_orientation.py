@@ -8,7 +8,97 @@ except ImportError:
     V = namedtuple('XYZVector', ['x', 'y', 'z'])
     Q = namedtuple('Quaternion', ['w', 'x', 'y', 'z'])
 
+from collections import namedtuple
+
 from scipy.spatial.transform import Rotation as R
+
+# result of fit_turntable_axis
+AxisFit = namedtuple("AxisFit", [
+    "c_body",        # turntable up axis in the IMU body frame (unit)
+    "w_world",       # same axis in the DMP world frame (unit, gravity-referenced)
+    "tilt_deg",      # angle between w_world and gravity up -> rig inclination
+    "c_body_accel",  # body axis from the gravity-cone fit (independent cross-check)
+    "spread_deg",    # consistency of the per-step axes (lower = cleaner)
+    "step_deg",      # mean per-step rotation angle (should match the stepper)
+    "n",             # number of usable samples
+])
+
+_WORLD_UP = np.array([0.0, 0.0, 1.0])
+
+
+def _unit(v):
+    n = np.linalg.norm(v)
+    return v / n if n > 0 else v
+
+
+def fit_turntable_axis(quaternions, scale=16384.0):
+    """Fit the turntable's rotation axis from a sweep's IMU quaternions.
+
+    The IMU revolves about the stepper axis, so every incremental rotation
+    ``q_k^{-1} q_{k+1}`` is about that same axis. This returns the axis in both
+    the IMU body frame (``c_body``) and the gravity-referenced DMP world frame
+    (``w_world``), plus the rig tilt (``w_world`` vs gravity) — averaging over the
+    whole sweep cancels gyro/yaw drift.
+
+    ``quaternions`` are the DMP int16 wxyz samples (as stored in
+    ``raw_scan["quaternions"]``). ``c_body_accel`` is an independent estimate from
+    fitting a plane to the gravity vectors (drift-free accel only); if it agrees
+    with ``c_body`` the fit is trustworthy.
+    """
+    q = np.asarray(quaternions, dtype=float) / scale          # wxyz, DMP scale
+    q /= np.linalg.norm(q, axis=1, keepdims=True)             # normalize
+    rm = R.from_quat(q[:, [1, 2, 3, 0]]).as_matrix()          # (N,3,3) body->world
+
+    # --- incremental fit: axis of each successive rotation ---
+    body_axes, world_axes, angles = [], [], []
+    for k in range(len(rm) - 1):
+        d_body = rm[k].T @ rm[k + 1]          # increment expressed in the body frame
+        rv_b = R.from_matrix(d_body).as_rotvec()
+        ang = np.linalg.norm(rv_b)
+        if ang < 1e-6:                        # skip duplicate / zero-angle samples
+            continue
+        d_world = rm[k + 1] @ rm[k].T
+        body_axes.append(rv_b / ang)
+        world_axes.append(_unit(R.from_matrix(d_world).as_rotvec()))
+        angles.append(ang)
+
+    if not body_axes:
+        raise ValueError("not enough motion to fit a turntable axis")
+
+    angles = np.asarray(angles)
+    c_body = _weighted_axis(np.asarray(body_axes), angles)
+    w_world = _weighted_axis(np.asarray(world_axes), angles)
+
+    # --- gravity-based axis (accel only, drift-free cross-check) ---
+    # gravity seen in the body frame = R^T @ z (third row of world_from_body).
+    # A tilted rig sweeps it on a cone about the axis -> fit the plane. A level
+    # rig (axis == gravity) keeps it constant -> that constant IS the axis.
+    g_body = rm[:, 2, :]
+    if g_body.std(axis=0).max() < 1e-6:
+        c_body_accel = _unit(g_body.mean(axis=0))          # level rig
+    else:
+        _, _, vt = np.linalg.svd(g_body - g_body.mean(axis=0))
+        c_body_accel = vt[2]                               # tilted rig: cone axis
+
+    tilt_deg = np.degrees(np.arccos(np.clip(abs(np.dot(w_world, _WORLD_UP)), -1, 1)))
+    spread = np.degrees(np.arccos(np.clip(np.abs(body_axes @ c_body), -1, 1)))
+
+    return AxisFit(
+        c_body=c_body,
+        w_world=w_world,
+        tilt_deg=float(tilt_deg),
+        c_body_accel=c_body_accel,
+        spread_deg=float(spread.std()),
+        step_deg=float(np.degrees(angles.mean())),
+        n=len(rm),
+    )
+
+
+def _weighted_axis(axes, weights):
+    """Angle-weighted mean of unit axes, sign-aligned (axes are ±ambivalent)."""
+    ref = _unit((axes * weights[:, None]).sum(axis=0))
+    aligned = np.where((axes @ ref)[:, None] < 0, -axes, axes)
+    return _unit((aligned * weights[:, None]).sum(axis=0))
 
 
 def DMP_get_roll_pitch_yaw(a_quat):
