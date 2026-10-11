@@ -121,7 +121,8 @@ try:
                                         AEB       = config.get("CAM", "AEB"),
                                         AEB_stops = config.get("CAM", "AEB_STOPS"),
                                         awbgains  = current_awbgains,
-                                        max_exposure = config.get("CAM", "max_exposure"))
+                                        gain_low  = config.get("CAM", "gain_low"),
+                                        gain_high = config.get("CAM", "gain_high"))
 
                 config.imglist.extend(imgpaths)
 

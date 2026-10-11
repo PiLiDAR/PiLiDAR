@@ -82,9 +82,8 @@
     "CAM": {
         "calibration_dims": [640, 480],
         "dims": [4056,3040],
-        "base_gain": 1.0,
-        "max_gain": 2.0,
-        "max_exposure": 1.0,
+        "gain_low": 1.0,
+        "gain_high": 2.0,
         "AEB": 1,
         "AEB_STOPS": 2
     },

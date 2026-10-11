@@ -38,24 +38,7 @@ def _ns(seconds):
     return int(round(seconds * 1e9))
 
 
-def choose_gain_exposure(auto_exposure, auto_gain, base_gain=1.0, max_gain=2.0, max_exposure=1.0):
-    """Pick the lowest ISO (gain) that keeps the exposure within ``max_exposure``.
-
-    Brightness is taken from **shutter time, not gain**, to avoid ISO noise:
-    ``base_gain`` (ISO 100) is preferred, and the gain is only raised — up to
-    ``max_gain`` (ISO 200) — when the exposure would otherwise exceed
-    ``max_exposure`` seconds. Returns ``(exposure_time_seconds, gain)``.
-    """
-    # exposure needed to keep the same light at the (low) base gain
-    e_base = auto_exposure * auto_gain / base_gain
-    if not max_exposure or e_base <= max_exposure:
-        return e_base, base_gain
-    # dark scene: raise gain to the cap to shorten the exposure
-    gain = max(base_gain, max_gain)
-    return auto_exposure * auto_gain / gain, gain
-
-
-# ISO 100 == gain 1.0; the bracket uses ISO 100 / ISO 200.
+# Default ISOs for the bracket (config: CAM.gain_low / CAM.gain_high).
 GAIN_LOW = 1.0    # ISO 100
 GAIN_HIGH = 2.0   # ISO 200
 
@@ -69,18 +52,13 @@ def illumination(exposure_time, gain):
     return exposure_time * gain
 
 
-def ev_transform(ev, max_exposure=1.0, gain_low=GAIN_LOW, gain_high=GAIN_HIGH):
-    """Turn an illumination value ``ev`` into ``(gain, exposure_time)``.
+def ev_transform(ev, gain_low=GAIN_LOW):
+    """Turn an illumination value ``ev`` into the base ``(gain, exposure_time)``.
 
-    Prefers the low ISO (``gain_low``, ISO 100); only if the required exposure
-    would exceed ``max_exposure`` seconds does it switch to the high ISO
-    (``gain_high``, ISO 200). There is no upper cap on the exposure once the
-    high ISO is chosen — a night scan may legitimately need seconds.
+    Always uses the low ISO (``gain_low``); the exposure is simply ``ev/gain``.
+    There is no exposure ceiling — a night scan may legitimately need seconds.
     """
-    exposure = ev / gain_low
-    if max_exposure and exposure > max_exposure:
-        return gain_high, ev / gain_high
-    return gain_low, exposure
+    return gain_low, ev / gain_low
 
 
 def bracket_exposures(ev, steps, gain_low=GAIN_LOW, gain_high=GAIN_HIGH):
@@ -183,22 +161,25 @@ class Camera:
                 return True
         return False
 
-    def _capture_at(self, path, exposure_time, gain, awbgains, tolerance=0.05, retries=8):
-        """Save a still and guarantee it carries ``exposure_time``.
+    def _capture_at(self, path, exposure_time, gain, awbgains, tol_exposure=0.05, tol_gain=0.02, retries=10):
+        """Save a still and guarantee it carries the requested settings.
 
-        Applies the controls, then captures requests until one reports the
-        requested exposure in its own metadata, saving only that frame. Falls
-        back to saving the last frame if no match is found (better a wrong
-        exposure than no image).
+        Applies the controls, then captures requests until one reports both the
+        requested ``ExposureTime`` (within ``tol_exposure``) and ``AnalogueGain``
+        (within ``tol_gain`` — the tight bound matters because the bracket shifts
+        gain by exactly 2×), saving only that frame. Falls back to saving the
+        last frame if no match is found (better a wrong exposure than no image).
         """
         want_ns = _ns(exposure_time)
-        slack = max(1_000_000, want_ns * tolerance)
+        slack_ns = max(1_000_000, want_ns * tol_exposure)
         self._lock_3a()
         self._set_manual(exposure_time, gain, awbgains)
         for _ in range(retries):
             request = self.camera.capture_request()
             meta = request.get_metadata()
-            if abs(meta["ExposureTime"] - want_ns) <= slack:
+            ok_e = abs(meta["ExposureTime"] - want_ns) <= slack_ns
+            ok_g = abs(meta["AnalogueGain"] - gain) <= tol_gain
+            if ok_e and ok_g:
                 request.save("main", path)
                 request.release()
                 return path
@@ -232,7 +213,7 @@ class Camera:
         and ``awbgains`` = ``[R, B]``.
         """
         calibration_dims = config.get("CAM", "calibration_dims")
-        max_exposure = config.get("CAM", "max_exposure")
+        gain_low = config.get("CAM", "gain_low")
 
         # converge 3A at a small resolution (faster than full-res); the result
         # carries over unchanged to the full-resolution stills (same FOV)
@@ -247,7 +228,7 @@ class Camera:
         self._lock_3a()
 
         ev = illumination(auto_exposure, auto_gain)
-        gain, exposure_time = ev_transform(ev, max_exposure=max_exposure)
+        gain, exposure_time = ev_transform(ev, gain_low=gain_low)
 
         return ev, gain, exposure_time, awbgains
 
@@ -259,7 +240,8 @@ class Camera:
         """
         return self._capture_at(path, exposure_time, gain, awbgains)
 
-    def take_hdr(self, path, ev, AEB, AEB_stops, awbgains, max_exposure=1.0):
+    def take_hdr(self, path, ev, AEB, AEB_stops, awbgains,
+                 gain_low=GAIN_LOW, gain_high=GAIN_HIGH):
         """Capture an HDR bracket around ``ev`` (the measured illumination).
 
         The EV offsets are ``[-AEB*stops, …, 0, …, +AEB*stops]`` determined by
@@ -272,11 +254,12 @@ class Camera:
         path_split = os.path.splitext(path)
         AEB = int(AEB)
         steps = [s * AEB_stops for s in range(-AEB, AEB + 1)]
+        bracket = bracket_exposures(ev, steps, gain_low=gain_low, gain_high=gain_high)
         paths = []
 
         self._lock_3a()
 
-        for step, (gain, exposure_time) in zip(steps, bracket_exposures(ev, steps)):
+        for step, (gain, exposure_time) in zip(steps, bracket):
             hdr_path = f"{path_split[0]}_{step}{path_split[1]}"
             # capture-and-verify so the saved frame carries this exposure
             self._capture_at(hdr_path, exposure_time, gain, awbgains)
