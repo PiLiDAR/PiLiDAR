@@ -14,8 +14,7 @@
 
     "USB_POWER": {
         "ENABLE": true,
-        "HUB": "1-1",
-        "PORT": 1,
+        "HUB": "2",
         "DELAY": 5
     },
 
@@ -24,6 +23,7 @@
         "STL27L": {
             "PORT_WIN": "COM3",
             "PORT": "/dev/ttyUSB0",
+            "PORT_BY_ID": "usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_*-if00-port0",
             "BAUDRATE": 921600,
             "SAMPLING_RATE": 21600,
             "OUT_LEN": 180,

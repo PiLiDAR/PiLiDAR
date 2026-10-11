@@ -6,14 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.5.5] - 2026-10-11
 
 ### Added
-- **LiDAR USB power gating (`lib/usb_power.py`):** the STL27L is USB-powered behind a per-port-power-switching hub, so its VBUS can be cut while idle (fully off, motor stopped) instead of leaving it powered from boot. `PiLiDAR.py` powers the port on *before* `Config()` resolves the serial port (otherwise it falls back to `/dev/ttyS0`) and cuts it on exit; `gpio_interrupt.py` also cuts it if a scan process died before its own cleanup. Configured via a new `USB_POWER` block in `config.json` (`ENABLE`/`HUB`/`PORT`/`DELAY`). Uses `uhubctl -l <hub> -p <port> -a on/off -e` (the `-e` exact-location flag is required so only the target port switches). Replaces the obsolete LD06 power relay — the LD06 was a bare UART board switched by GPIO, the STL27L has its own USB controller. Verified on hardware: port off → `/dev/ttyUSB0` disappears; on → re-enumerates in ~4 s.
-- **`tests/test_usb_power.py`:** 3 tests for the config plumbing (defaults, missing block, disabled no-op) — suite now 33 tests.
+- **LiDAR USB power gating (`lib/usb_power.py`):** the STL27L is USB-powered, so its VBUS can be cut while idle (fully off, no spin, no power draw) instead of running from boot — this replaces the obsolete LD06 power relay. `PiLiDAR.py` powers the hub on *before* `Config()` resolves the serial port (otherwise it falls back to `/dev/ttyS0`) and cuts it again right after acquisition, before the (long) stitching/3D post-processing; `gpio_interrupt.py` cuts it at boot and also if a scan process died before its own cleanup. Configured via an `USB_POWER` block in `config.json` (`ENABLE`/`HUB`/`DELAY`). Validated step-by-step on hardware with the unit's power LED as ground truth.
+- **Stable serial path resolution:** power-cycling the USB port renumbers the LiDAR (`ttyUSB0` → `ttyUSB1` → …), so the port is now resolved from the stable `/dev/serial/by-id/...` link (`LIDAR.<DEVICE>.PORT_BY_ID` in `config.json`) with the raw `PORT` as fallback — in both `lib/usb_power.py` and `lib/config.py` (`Config.resolve_port()`).
+- **`tests/test_usb_power.py`:** 5 tests for the config plumbing (defaults, missing block, by-id resolution, disabled no-op) — suite now 35 tests.
 
 ### Changed
-- **`docs/setup.md`:** the USB power-switching section corrected (the LiDAR is on hub `1-1` port 1, not USB-3 hub 2) and documents the automatic gating + `USB_POWER` config.
-- **`PiLiDAR.py`:** replaced the vestigial LD06-relay comments with the USB power-off call; ASCII banner made a raw string (clears escape-sequence warnings).
+- **`docs/setup.md`:** USB power-switching section rewritten with the working Pi 4 method and the caveat below.
 
 ### Notes
+- **Pi 4 USB power: whole-hub only.** On the Pi 4 the USB-A switch is in the VL805 (bus 2) and *only whole-hub* switching actually cuts power: `sudo uhubctl -l 2 -a 0` (off) / `-a 1` (on). Per-port (`-p`) and exact-location (`-e`) flags only drop the USB *data* link — the LiDAR keeps running (confirmed: blue LED stays on while the CP210x disappears from the bus). The trade-off is that the whole-hub cut powers down **all four USB-A ports** (blue 3.0 and black 2.0 alike), so nothing that must stay powered during the idle window should sit on USB-A. A per-device switch (the freed relay pin GPIO24, or a MOSFET) would remove that limitation once rewired.
 - **Motor idle power (A4988 `/EN`):** postponed — the A4988 holding current/holding-lock while idle is a real issue but the fix needs a hardware change (route `/EN` to a free GPIO; the freed relay pin GPIO24 is a candidate) and cannot be done today without making the rig unusable.
 
 ## [2.5.4] - 2026-10-11

@@ -18,9 +18,11 @@ import operator
 try:
     from lib.file_utils import make_dir
     from lib.platform_utils import get_platform, allow_serial
+    from lib.usb_power import resolve_serial_device
 except:
     from file_utils import make_dir
     from platform_utils import get_platform, allow_serial
+    from usb_power import resolve_serial_device
 
 # cached lgpio gpiochip handle for the power relay (survives Config() re-init)
 _GPIO_CHIP = None
@@ -157,10 +159,10 @@ class Config:
 
             self.gpio_setup()  # enable GPIO Ports
 
-            self.PORT = self.get("LIDAR", self.DEVICE , "PORT")
-            if not os.path.exists(self.PORT):
-                # if USB controller board is not connected, try serial port
-                self.PORT = self.get("LIDAR", "GPIO_SERIAL", "PORT")
+            self.PORT = self.resolve_port()
+        if not os.path.exists(self.PORT):
+            # if USB controller board is not connected, try serial port
+            self.PORT = self.get("LIDAR", "GPIO_SERIAL", "PORT")
 
             # disable filtering on Raspberry Pi as it is computationally too expensive
             if not self.get("FILTERING", "FILTER_ON_PI"):
@@ -177,6 +179,15 @@ class Config:
         for key in args:
             value = value[key]
         return value
+
+    def resolve_port(self):
+        """LiDAR serial device, preferring the stable /dev/serial/by-id path.
+
+        Power-cycling the USB port renumbers ttyUSB (0 -> 1 -> ...), so the raw
+        PORT is not stable across scans; PORT_BY_ID (if configured) wins.
+        """
+        device_cfg = self.dict["LIDAR"][self.DEVICE]
+        return resolve_serial_device(device_cfg.get("PORT"), device_cfg.get("PORT_BY_ID"))
 
     def set(self, value, *args):
         d = self.dict

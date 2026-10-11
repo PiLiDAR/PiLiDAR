@@ -1,22 +1,31 @@
 '''
 USB port power control for the LiDAR (lib/usb_power.py).
 
-The STL27L LiDAR is powered over USB; its controller board is a Silicon Labs
-CP210x UART bridge behind a per-port-power-switching hub. Cutting USB VBUS for
-that port turns the LiDAR fully off while idle — this replaces the obsolete LD06
-power relay, which was only needed because the LD06 was a bare UART board.
+The STL27L is USB-powered: cutting USB VBUS while idle turns it fully off (no
+spin, no power draw) — this replaces the obsolete LD06 power relay.
+
+On the **Raspberry Pi 4** the USB-A power switching lives in the VL805 USB3
+controller (USB bus 2), and *only whole-hub switching actually cuts VBUS*::
+
+    sudo uhubctl -l 2 -a 0     # all USB-A ports off
+    sudo uhubctl -l 2 -a 1     # on
+
+Per-port (`-p`) and exact-location (`-e`) flags change the reported port state
+and drop the USB *data* link, but do NOT remove power (the LiDAR keeps running).
+Reference: https://raspberrypi.stackexchange.com/questions/5407#74906
 
 Uses [uhubctl](https://github.com/mvp/uhubctl); needs passwordless sudo for it
 (the default Raspberry Pi OS ``pi`` user has ``NOPASSWD: ALL``). Settings live in
-``config.json`` under ``USB_POWER``::
+``config.json``::
 
-    "USB_POWER": {"ENABLE": true, "HUB": "1-1", "PORT": 1, "DELAY": 5}
+    "USB_POWER": {"ENABLE": true, "HUB": "2", "DELAY": 5}
 
 This module reads ``config.json`` directly (not via :class:`lib.config.Config`)
 so it can power the LiDAR on *before* ``Config.__init__`` resolves the serial
 port — otherwise a powered-off LiDAR makes the port fall back to ``/dev/ttyS0``.
 '''
 
+import glob
 import json
 import logging
 import os
@@ -46,35 +55,50 @@ def find_uhubctl():
     return None
 
 
+def resolve_serial_device(port=None, by_id_glob=None):
+    """Resolve the LiDAR serial device, preferring a stable by-id path.
+
+    Power-cycling the USB port renumbers ``ttyUSB`` (0 -> 1 -> ...), so a raw
+    ``/dev/ttyUSB0`` is not stable. If ``by_id_glob`` matches under
+    ``/dev/serial/by-id`` the first match is returned, else ``port``.
+    """
+    if by_id_glob:
+        matches = sorted(glob.glob(os.path.join("/dev/serial/by-id", by_id_glob)))
+        if matches:
+            return matches[0]
+    return port or "/dev/ttyUSB0"
+
+
 def load_settings(config_path=CONFIG_PATH):
-    """Read the USB_POWER block + the LiDAR serial port from config.json."""
+    """Read the USB_POWER block + the LiDAR serial device from config.json."""
     with open(config_path) as f:
         cfg = json.load(f)
 
     usb = cfg.get("USB_POWER", {})
     lidar = cfg.get("LIDAR", {})
     device = lidar.get("DEVICE")
-    device_port = lidar.get(device, {}).get("PORT", "/dev/ttyUSB0")
+    device_cfg = lidar.get(device, {})
 
     return {
         "enabled": bool(usb.get("ENABLE", False)),
-        "hub": usb.get("HUB", "1-1"),
-        "port": usb.get("PORT", 1),
+        "hub": usb.get("HUB", "2"),
         "delay": usb.get("DELAY", 5),
-        "device": device_port,
+        "device": resolve_serial_device(
+            device_cfg.get("PORT", "/dev/ttyUSB0"),
+            device_cfg.get("PORT_BY_ID"),
+        ),
     }
 
 
-def _switch(action, hub, port, delay=None):
-    """Run ``uhubctl -a <action>`` on one port. Returns True on success."""
+def _switch(action, hub, delay=None):
+    """Run ``uhubctl -a <action>`` on a whole hub. Returns True on success."""
     exe = find_uhubctl()
     if exe is None:
         logger.warning("uhubctl not found; USB power switching unavailable")
         return False
 
-    # -e (exact location) disables uhubctl's USB3 duality handling, so only the
-    # target port on the target hub is switched (the xHCI root hub mirror is not).
-    cmd = ["sudo", "-n", exe, "-l", str(hub), "-p", str(port), "-a", action, "-e"]
+    # Whole-hub only — no -p/-e, which do not switch VBUS on the Pi 4.
+    cmd = ["sudo", "-n", exe, "-l", str(hub), "-a", action]
     if delay is not None:
         cmd += ["-d", str(delay)]
     try:
@@ -89,7 +113,7 @@ def _switch(action, hub, port, delay=None):
 
 
 def _wait_for_device(path, timeout=15.0):
-    """Wait until a device node appears (e.g. /dev/ttyUSB0 after power on)."""
+    """Wait until a device node appears (e.g. /dev/ttyUSB1 after power on)."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         if os.path.exists(path):
@@ -99,31 +123,30 @@ def _wait_for_device(path, timeout=15.0):
 
 
 def lidar_on(settings=None):
-    """Power the LiDAR USB port on, wait for it to enumerate, and settle.
+    """Power the LiDAR USB hub on, wait for it to enumerate, and settle.
 
     Call this before constructing :class:`lib.config.Config` so the serial port
-    resolves correctly. Returns True if the port was switched on (or the feature
-    is disabled/no-op), False on failure.
+    resolves correctly. Returns True if switched on.
     """
     s = settings or load_settings()
     if not s["enabled"]:
         return False
-    if not _switch("on", s["hub"], s["port"]):
+    if not _switch("on", s["hub"]):
         return False
     if not _wait_for_device(s["device"]):
         logger.warning("LiDAR device %s did not appear after power on", s["device"])
         return False
     time.sleep(s["delay"])  # controller boot + motor spin-up
-    logger.info("LiDAR USB power on (%s port %s)", s["hub"], s["port"])
+    logger.info("LiDAR USB power on (hub %s)", s["hub"])
     return True
 
 
 def lidar_off(settings=None):
-    """Cut power to the LiDAR USB port (fully off). Returns True on success."""
+    """Cut power to the LiDAR USB hub (fully off). Returns True on success."""
     s = settings or load_settings()
     if not s["enabled"]:
         return False
-    ok = _switch("off", s["hub"], s["port"])
+    ok = _switch("off", s["hub"])
     if ok:
-        logger.info("LiDAR USB power off (%s port %s)", s["hub"], s["port"])
+        logger.info("LiDAR USB power off (hub %s)", s["hub"])
     return ok

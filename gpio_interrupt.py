@@ -6,19 +6,16 @@ RPi.GPIO. The button edge is handled by an lgpio callback thread, so the
 main thread just sleeps — no polling loop — and idle CPU usage is ~0%.
 '''
 
+import os
 import subprocess
+import sys
 import time
 
 import lgpio
 
+# make ``lib`` importable when run by systemd (working dir may not be the repo)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import usb_power
-
-# # ENABLE USB POWER
-# subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "on"])
-
-# # DISABLE USB POWER
-# subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "off"])
-
 
 START_PIN   = 17
 VENV_PYTHON = "/home/pi/venv/bin/python"
@@ -26,6 +23,11 @@ MAIN_SCRIPT = "/home/pi/PiLiDAR/PiLiDAR.py"
 
 
 process = None
+
+# Cut the LiDAR USB power at boot: the STL27L is powered from USB and must not
+# spin (or draw power) while idle. PiLiDAR.py powers it back on for the
+# acquisition phase and off again once the scan data is saved.
+usb_power.lidar_off()
 
 
 def start_callback(chip, gpio, level, tick):

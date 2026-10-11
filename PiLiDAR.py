@@ -23,10 +23,11 @@ print(r'''
 ''')
 
 
-# Power the LiDAR USB port on BEFORE Config() resolves the serial port: if the
-# LiDAR VBUS is cut (idle), the port is absent and Config falls back to /dev/ttyS0.
-# The power-off is registered with atexit so it runs on *any* exit; SIGTERM is
-# converted to SystemExit so the finally/atexit handlers still run (systemd stop).
+# The service (gpio_interrupt.py) cuts the LiDAR USB power at boot. Power it back
+# on BEFORE Config() resolves the serial port: if the LiDAR VBUS is cut, the port
+# is absent and Config falls back to /dev/ttyS0. The power is cut again right
+# after acquisition (before post-processing); atexit is the safety net for a crash
+# and SIGTERM is converted to SystemExit so the finally/atexit handlers still run.
 def _on_terminate(signum, frame):
     raise SystemExit(128 + signum)
 
@@ -160,9 +161,9 @@ finally:
 
     stepper.close()
 
-# Cut LiDAR USB power (fully off while idle) — registered with atexit above so it
-# runs on normal exit, on an exception, and on SIGTERM/systemd stop. The old LD06
-# power relay is obsolete: the STL27L is USB-powered, see lib/usb_power.py.
+# Acquisition is done: cut the LiDAR USB power now, before the (long) stitching
+# and 3D post-processing. atexit (registered above) is the safety net for a crash.
+usb_power.lidar_off()
 
 
 # STITCHING PROCESS

@@ -191,10 +191,22 @@ implemented in `meshlab/pymeshlab_test.py`:
 
 ## power switching the USB port (LiDAR idle power-off)
 
-The STL27L LiDAR is powered over USB. Its controller (a Silicon Labs CP210x
-UART bridge) sits behind a **per-port-power-switching** hub, so its VBUS can be
-cut while idle to save power (and stop the motor) — this replaces the old LD06
-power relay.
+The STL27L is powered over USB: cutting USB VBUS while idle turns it fully off
+(no red spin, no power draw) — this replaces the old LD06 power relay.
+
+**On the Raspberry Pi 4, only *whole-hub* switching actually cuts VBUS.** The
+USB-A power switch lives in the VL805 USB3 controller (bus 2), and per-port
+(`-p`) / exact-location (`-e`) flags merely drop the USB *data* link while the
+LiDAR keeps drawing power (verified on hardware: the blue LED stays on). The
+working commands are:
+
+    sudo uhubctl -l 2 -a 0     # OFF — all four USB-A ports
+    sudo uhubctl -l 2 -a 1     # ON
+
+Note this powers down **all** USB-A ports together (both the blue 3.0 and black
+2.0 ports), so do not put anything on USB-A that must stay powered while the
+LiDAR is idle. Reference:
+[how can I cut power out of the Pi's USB ports](https://raspberrypi.stackexchange.com/questions/5407#74906).
 
 Using the [uhubctl](https://github.com/mvp/uhubctl) cli tool:
 
@@ -204,23 +216,20 @@ list all hubs, ports and devices:
 
     sudo uhubctl
 
-find the port the LiDAR is on (note the `cp210x` / `ttyUSB` line). On this rig it
-is hub `1-1`, port `1`:
+PiLiDAR calls this automatically. Configure the hub in `config.json`:
 
-    sudo uhubctl -l 1-1 -p 1 -a off -e    # cut the LiDAR (off while idle)
-    sudo uhubctl -l 1-1 -p 1 -a on  -e    # power it back on
+    "USB_POWER": { "ENABLE": true, "HUB": "2", "DELAY": 5 }
 
-> The `-e` (**exact** location) flag matters: without it uhubctl's "USB3
-> duality" handling also toggles the mirrored port on the xHCI root hub (bus 2).
+`PiLiDAR.py` powers the hub on before opening the serial port (so the LiDAR
+enumerates rather than the port falling back to `/dev/ttyS0`) and cuts it again
+before post-processing; `gpio_interrupt.py` cuts it, too, if a scan process died
+before its own cleanup. See `lib/usb_power.py`. `uhubctl` must be runnable
+without a password — the default Raspberry Pi OS `pi` user already has
+`NOPASSWD: ALL`.
 
-PiLiDAR calls this automatically. Configure the hub/port in `config.json`:
-
-    "USB_POWER": { "ENABLE": true, "HUB": "1-1", "PORT": 1, "DELAY": 5 }
-
-`PiLiDAR.py` powers the LiDAR on before opening the serial port (so it
-enumerates as `/dev/ttyUSB0` rather than falling back to `/dev/ttyS0`) and cuts
-it again on exit; see `lib/usb_power.py`. `uhubctl` must be runnable without a
-password — the default Raspberry Pi OS `pi` user already has `NOPASSWD: ALL`.
+> Power-cycling renumbers the serial device (`ttyUSB0` → `ttyUSB1` → …), so the
+> LiDAR path is resolved from the stable `/dev/serial/by-id/...` link (set
+> `LIDAR.STL27L.PORT_BY_ID` in `config.json`); the raw `PORT` is only a fallback.
 
 
 ## jupyter over remote-ssh
