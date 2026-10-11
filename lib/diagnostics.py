@@ -208,8 +208,12 @@ def check_gpio(config):
 def run_doctor(config=None, lidar_seconds=3.0, skip=()):
     """Run all checks and return a list of :class:`Result`."""
     if config is None:
+        # Config.__init__ already sets scans_root / device / PORT; init() would
+        # create an empty scan directory, which diagnostics must not litter.
+        # Lidar.__init__ reads config.raw_path (normally set by init()); it is
+        # unused for the read-only packet check, so provide a placeholder.
         config = Config()
-        config.init(scan_id="doctor")
+        config.raw_path = None
 
     platform = get_platform()
     on_pi = platform == "RaspberryPi"
@@ -265,11 +269,6 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     config = Config()
-    try:
-        config.init(scan_id="doctor")
-    except Exception:
-        pass  # diagnostics should still run with a partial config
-
     results = run_doctor(config, lidar_seconds=args.lidar_seconds, skip=args.skip)
     _print(results, use_json=args.json)
 

@@ -28,7 +28,9 @@ EXPECTED_RATE = {"LD06": 375, "LD19": 1800, "STL27L": 1800}
 
 def main(duration=30):
     config = Config()
-    config.init(scan_id="test")  # reuse scans/test, no new scan dir
+    # no config.init(): it would create an empty scan directory we don't need.
+    # Lidar.__init__ reads config.raw_path (normally set by init()); unused here.
+    config.raw_path = None
 
     lidar = Lidar(config, visualization=None)
     expected = EXPECTED_RATE.get(config.DEVICE)
