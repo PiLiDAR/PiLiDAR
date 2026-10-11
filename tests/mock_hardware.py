@@ -156,7 +156,7 @@ class MockCamera:
     def estimate_parameters(self, config):
         return self.exposure_time, self.gain, self.awbgains
 
-    def configure(self, still_dims, preview_dims=None):
+    def configure(self, still_dims, lores_dims=None):
         self.configured_dims = tuple(still_dims)
 
     def take_photo(self, path, exposure_time, gain, awbgains):

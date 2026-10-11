@@ -84,8 +84,8 @@ class Camera:
         return False
 
     # -- configuration -------------------------------------------------------
-    def configure(self, still_dims, preview_dims=None):
-        """Configure still + (optional) preview streams and start the camera.
+    def configure(self, still_dims, lores_dims=None):
+        """Configure still + (optional) low-res streams and start the camera.
 
         Uses ``create_still_configuration()`` so the full config structure
         (``raw``/``sensor``/``controls``/stream alignment) is built correctly;
@@ -98,7 +98,7 @@ class Camera:
             pass
         config = self.camera.create_still_configuration(
             main={"size": tuple(still_dims)},
-            lores={"size": tuple(preview_dims)} if preview_dims else None,
+            lores={"size": tuple(lores_dims)} if lores_dims else None,
         )
         self.camera.configure(config)
         self.camera.start()
@@ -184,12 +184,14 @@ class Camera:
         Returns ``(exposure_time, gain, awbgains)`` in seconds / total linear
         gain / ``[R, B]``.
         """
-        preview_dims = config.get("CAM", "preview_dims")
+        calibration_dims = config.get("CAM", "calibration_dims")
         base_gain = config.get("CAM", "base_gain")
         max_gain = config.get("CAM", "max_gain")
         max_exposure = config.get("CAM", "max_exposure")
 
-        self.configure(still_dims=preview_dims)
+        # converge 3A at a small resolution (faster than full-res); the result
+        # carries over unchanged to the full-resolution stills (same FOV)
+        self.configure(still_dims=calibration_dims)
         self._settle()
 
         meta = self.camera.capture_metadata()
