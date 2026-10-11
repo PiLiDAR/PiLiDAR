@@ -1,12 +1,12 @@
-"""Log one IMU quaternion per LiDAR plane during a real sweep.
+"""Log the IMU quaternion at every stepper angle over a full 360 deg sweep.
 
-Mirrors the scan loop (read_loop at every plane boundary) but instead of moving
-the stepper it just records the IMU quaternion, so we can fit the turntable axis
-from a full sweep and cross-check the incremental-rotation and gravity methods.
+Writes /tmp/up_vector_sweep.csv with columns: angle_deg, qw, qx, qy, qz, norm.
+The raw (un-normalized) values are kept so a corrupted / misaligned DMP stream is
+visible (a healthy unit quaternion has norm ~16384).
 
 Run on the Pi:  ~/venv/bin/python experiments/up_vector_probe.py
-Writes:         /tmp/up_vector_probe.npz  (quaternions, z_angles)
 """
+import csv
 import os
 import sys
 import time
@@ -17,60 +17,50 @@ import numpy as np  # noqa: E402
 
 from lib.config import Config  # noqa: E402
 from lib.imu_driver import MPU6050Wrapper  # noqa: E402
-from lib.lidar_driver import Lidar  # noqa: E402
-from lib import usb_power  # noqa: E402
-from lib.imu_orientation import fit_turntable_axis  # noqa: E402
+from lib.a4988_driver import A4988  # noqa: E402
 
-OUT = "/tmp/up_vector_probe.npz"
-MAX_PLANES = 200      # stop early; we don't move the stepper
-
-STOP = False
+OUT_CSV = "/tmp/up_vector_sweep.csv"
+STEP_DEG = 5.0         # 72 samples over 360 deg
+SETTLE = 0.6
 
 
 def main():
-    if not usb_power.lidar_on():
-        print("could not power the LiDAR")
-        return
-
     config = Config()
-    config.init(scan_id="_probe")
+    config.raw_path = None
 
     imu = MPU6050Wrapper(config.get("IMU", "i2c_bus"), config.get("IMU", "device_address"),
                          config.get("IMU", "frequency"))
-    time.sleep(0.5)
-    lidar = Lidar(config, visualization=None)
-    lidar.step_at_angle = None            # plain full revolutions
+    stepper = A4988(config.get("STEPPER", "pins", "DIR_PIN"),
+                    config.get("STEPPER", "pins", "STEP_PIN"),
+                    config.get("STEPPER", "pins", "MS_PINS"),
+                    delay=config.get("STEPPER", "STEP_DELAY"),
+                    step_angle=config.get("STEPPER", "STEP_ANGLE"),
+                    microsteps=config.get("STEPPER", "MICROSTEPS"),
+                    gear_ratio=config.get("STEPPER", "GEAR_RATIO"))
 
-    quats, angles = [], []
-    lidar.start_reader()
+    rows = []
     try:
-        planes = 0
-        while planes < MAX_PLANES:
-            if lidar.out_i >= lidar.out_len:
-                quats.append(imu.get_quat_values())
-                angles.append(round(float(np.degrees(lidar.angle_package[0])), 2))
-                lidar.out_i = 0
-                planes += 1
-            if lidar.read_from_queue(timeout=1.0):
-                lidar.out_i += 1
+        time.sleep(0.5)
+        for _ in range(int(360 / STEP_DEG) + 1):
+            angle = round(stepper.get_current_angle(), 2)
+            q = imu.get_quat_values().astype(float)          # raw int16 wxyz
+            norm = float(np.linalg.norm(q))
+            rows.append((angle, q[0], q[1], q[2], q[3], norm))
+            stepper.move_angle(STEP_DEG)
+            time.sleep(SETTLE)
     finally:
-        lidar.stop_reader()
-        lidar.serial_connection.close()
+        stepper.close()
         imu.close()
-        usb_power.lidar_off()
 
-    quats = np.array(quats, dtype=float)
-    np.savez(OUT, quaternions=quats, z_angles=np.array(angles))
-    print(f"logged {len(quats)} quaternion samples -> {OUT}")
+    with open(OUT_CSV, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["angle_deg", "qw", "qx", "qy", "qz", "norm"])
+        w.writerows(rows)
 
-    fit = fit_turntable_axis(quats)
-    print("turntable axis fit:")
-    print(f"  c_body        = [{fit.c_body[0]:+.4f} {fit.c_body[1]:+.4f} {fit.c_body[2]:+.4f}]")
-    print(f"  c_body_accel  = [{fit.c_body_accel[0]:+.4f} {fit.c_body_accel[1]:+.4f} {fit.c_body_accel[2]:+.4f}]")
-    print(f"  w_world       = [{fit.w_world[0]:+.4f} {fit.w_world[1]:+.4f} {fit.w_world[2]:+.4f}]")
-    print(f"  |c_body.c_accel| = {abs(np.dot(fit.c_body, fit.c_body_accel)):.4f}  (1.0 = agree)")
-    print(f"  tilt_deg = {fit.tilt_deg:.2f}  spread_deg = {fit.spread_deg:.3f}  step_deg = {fit.step_deg:.4f}  n = {fit.n}")
-    print(f"  z_angles span: {angles[0]:.1f}..{angles[-1]:.1f} deg")
+    norms = np.array([r[5] for r in rows])
+    print(f"wrote {len(rows)} rows -> {OUT_CSV}")
+    print(f"norm: mean={norms.mean():.0f}  min={norms.min():.0f}  max={norms.max():.0f}  "
+          f"(healthy ~16384)")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,15 @@ import time
 import math
 import numpy as np
 import threading
+import smbus
 from mpu6050 import MPU6050
+
+# MPU6050 registers for a fast, block-based FIFO read
+_FIFO_COUNTH = 0x72
+_FIFO_R_W = 0x74
+_SMBUS_BLOCK_MAX = 32          # I2C_SMBUS_BLOCK_MAX
+_QUAT_NORM = 16384.0           # unit quaternion in DMP int16 units
+_NORM_TOL = 0.10               # accept +-10% of the unit norm
 
 
 class MPU6050Wrapper:
@@ -18,6 +26,11 @@ class MPU6050Wrapper:
         self.packet_size = self.mpu.DMP_get_FIFO_packet_size()
         self.FIFO_buffer = [0]*64
 
+        # our own bus handle for bulk FIFO reads (the library reads one byte at
+        # a time, which is far too slow over the bit-banged i2c-gpio bus: the
+        # 1024-byte FIFO overflows mid-packet and the stream loses alignment)
+        self.bus = smbus.SMBus(i2c_bus)
+
         self.quat = None  # current Quaternion object
         self._lock = threading.Lock()
 
@@ -26,33 +39,48 @@ class MPU6050Wrapper:
         self.thread.daemon = True
         self.thread.start()
 
+    def _fifo_count(self):
+        hi, lo = self.bus.read_i2c_block_data(self.device_address, _FIFO_COUNTH, 2)
+        return (hi << 8) | lo
+
+    def _read_fifo(self, n):
+        """Read ``n`` bytes from the FIFO in <=32-byte block transactions."""
+        out = []
+        while n > 0:
+            chunk = min(n, _SMBUS_BLOCK_MAX)
+            out.extend(self.bus.read_i2c_block_data(self.device_address, _FIFO_R_W, chunk))
+            n -= chunk
+        return out
+
+    @staticmethod
+    def _valid(quat):
+        """A real DMP quaternion has a norm near 16384 (int16 units)."""
+        norm = math.sqrt(quat.w**2 + quat.x**2 + quat.y**2 + quat.z**2)
+        return abs(norm - _QUAT_NORM) <= _QUAT_NORM * _NORM_TOL
+
     def _read_mpu6050(self):
         while self.running:
             try:
-                # drain the FIFO completely on every wake-up: read ALL pending
-                # packets and keep the freshest quaternion. Reading one packet
-                # per cycle lets a backlog grow until the 1024-byte FIFO
-                # overflows (the library then resets it and prints 'overflow!').
-                # Note: isreadyFIFO() gates on a one-shot interrupt status bit,
-                # so we drain by FIFO byte count instead.
-                fifo_count = self.mpu.get_FIFO_count()
+                # drain the FIFO with bulk reads; keep the freshest valid quaternion
+                fifo_count = self._fifo_count()
                 if fifo_count >= self.packet_size and fifo_count < 1024:
                     got_packet = False
                     while fifo_count >= self.packet_size:
-                        self.FIFO_buffer = self.mpu.get_FIFO_bytes(self.packet_size)
+                        self.FIFO_buffer = self._read_fifo(self.packet_size)
                         quat = self.mpu.DMP_get_quaternion_int16(self.FIFO_buffer)
                         fifo_count -= self.packet_size
 
-                        # Check if any value is NaN
-                        if not any(math.isnan(value) for value in [quat.w, quat.x, quat.y, quat.z]):
+                        if self._valid(quat):
                             with self._lock:
                                 self.quat = quat
                             got_packet = True
+                        else:
+                            # byte misalignment (FIFO overran mid-read): reset to
+                            # re-sync rather than feeding garbage downstream
+                            self.mpu.reset_FIFO()
+                            break
 
-                    if got_packet:
-                        time.sleep(0.02)
-                    else:
-                        time.sleep(0.005)
+                    time.sleep(0.02 if got_packet else 0.005)
                 elif fifo_count >= 1024:
                     # overflowed (1024 bytes is the chip's FIFO size) -> reset
                     self.mpu.reset_FIFO()
