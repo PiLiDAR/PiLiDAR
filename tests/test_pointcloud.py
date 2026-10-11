@@ -105,6 +105,43 @@ def test_scan_provenance_best_effort():
     assert prov["config"]["imu_leveling"] is True
 
 
+def test_angular_from_cartesian_center_is_origin_shift():
+    """The projection `center` is a true origin shift."""
+    from lib.pointcloud import angular_from_cartesian
+    pts = np.array([[1.0, 2.0, 3.0], [-4.0, 0.5, 2.0], [0.0, 0.0, 5.0]])
+    c = np.array([0.3, -0.2, 1.0])
+    assert np.allclose(angular_from_cartesian(pts, center=c), angular_from_cartesian(pts - c))
+
+
+def test_intensity_coercion_accepts_0_1_and_0_255():
+    from lib.pointcloud import _as_uint8_intensity
+    assert _as_uint8_intensity(np.array([0.0, 0.5, 1.0])).tolist() == [0, 127, 255]
+    assert _as_uint8_intensity(np.array([0.0, 128.0, 255.0])).tolist() == [0, 128, 255]
+
+
+def test_render_lidar_pano_smoke():
+    """Render a grayscale pano from points + intensity; unobserved stays black."""
+    import open3d as o3d
+    from lib.pointcloud import get_lidar_pano
+
+    rng = np.random.default_rng(0)
+    # a dense sphere of points so the pano is fully populated
+    dirs = rng.normal(size=(100000, 3))
+    dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
+    pts = dirs * 2.0
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pts)
+
+    img = get_lidar_pano(pcd, 256, 128, intensity=np.full(len(pts), 200.0))
+    assert img.shape == (128, 256)
+    assert img.dtype == np.uint8
+    assert (img > 0).mean() > 0.5        # mostly populated
+
+    # a centre shift must change the rendered image
+    img2 = get_lidar_pano(pcd, 256, 128, intensity=np.full(len(pts), 200.0), center=(0.5, 0.0, 0.0))
+    assert not np.array_equal(img, img2)
+
+
 def test_load_falls_back_to_legacy_pickle(tmp_path):
     """A plain .pkl with no sibling .npz still loads."""
     raw_scan = {"header": {}, "z_angles": [0.0, 90.0],

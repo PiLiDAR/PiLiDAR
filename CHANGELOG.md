@@ -3,6 +3,16 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.4] - 2026-10-12
+
+### Added
+- **Projection centre for the panoramic projection.** `angular_from_cartesian(points, center=...)` now subtracts an explicit origin, so the equirectangular render can be done about any point (the effective camera nodal point) — the principal knob for LiDAR↔camera extrinsic calibration.
+- **`get_lidar_pano(pcd, W, H, intensity=..., center=..., z_rotate=...)` now uses *true* laser intensity** (falls back to the colour red channel only if not supplied) and is vectorised via the new `render_lidar_pano()`. Previously it read `colors[:,0]` from the *colourised* cloud, which made any alignment against the panorama circular.
+- Tests: centre = origin-shift, intensity coercion (0–1 / 0–255), and a pano render smoke test. Suite now 81 tests.
+
+### Notes
+- Raw intensity is available in the merged array (`merge_2D_points` col 3); it is not currently written to the PLY, so the LiDAR panorama must be built from the raw scan. Preserving intensity through export is a follow-up.
+
 ## [2.6.3] - 2026-10-12
 
 ### Added

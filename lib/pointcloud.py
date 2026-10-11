@@ -354,28 +354,43 @@ def filter_by_reference(original_pcd, reference_pcd, radius=0.02):
 
 #------------------------------------------------------------------------------------------------
 
-def get_lidar_pano(pcd, image_width, image_height):
-    # Step 1: Extract luminance values
-    luminance = np.asarray(pcd.colors)[:, 0]  # Assuming luminance is stored in the red channel
+def get_lidar_pano(pcd, image_width, image_height, intensity=None, center=(0, 0, 0), z_rotate=0):
+    """Render a grayscale panorama from a point cloud, coloured by laser intensity.
 
-    # Step 2: Convert 3D points to angular coordinates
-    angular_points = angular_from_cartesian(np.asarray(pcd.points))
+    ``intensity`` (per point, 0-255 or 0-1) is preferred; when omitted it falls
+    back to the red channel of the cloud colours — but a truly independent LiDAR
+    panorama must pass the raw intensity, otherwise a colourised cloud makes this
+    circular (it would re-project the colour panorama it is trying to align to).
 
-    # Step 3: Map angular coordinates to image coordinates
-    image_x, image_y = get_sampling_coordinates(angular_points, (image_height, image_width))
+    ``center`` (x, y, z) is the projection origin — the effective camera nodal
+    point; it is the main knob the panoramic calibration tunes. ``z_rotate`` (deg)
+    rotates the equirectangular map horizontally.
+    """
+    if intensity is None:
+        intensity = np.asarray(pcd.colors)[:, 0]
+    return render_lidar_pano(np.asarray(pcd.points), intensity, image_width, image_height,
+                             center=center, z_rotate=z_rotate)
 
-    # Step 4: Create an empty grayscale image
+
+def _as_uint8_intensity(intensity):
+    """Coerce intensities to uint8, accepting either 0-1 or 0-255 ranges."""
+    intensity = np.asarray(intensity, dtype=float)
+    if intensity.size and intensity.max() <= 1.0 + 1e-6:
+        intensity = intensity * 255.0
+    return np.clip(intensity, 0, 255).astype(np.uint8)
+
+
+def render_lidar_pano(points, intensity, image_width, image_height, center=(0, 0, 0), z_rotate=0):
+    """Grayscale equirectangular panorama from 3D ``points`` + per-point ``intensity``.
+
+    Vectorised (a single ``img[y, x] = value`` scatter) so it stays fast on the
+    ~2 M-point clouds. Unobserved pixels remain black.
+    """
+    angular_points = angular_from_cartesian(points, center=center)
+    image_x, image_y = get_sampling_coordinates(angular_points, (image_height, image_width), z_rotate=z_rotate)
     panorama = np.zeros((image_height, image_width), dtype=np.uint8)
-
-    # Step 5: Populate the grayscale image with luminance values
-    for i in range(len(image_x)):
-        x, y = image_x[i], image_y[i]
-        if 0 <= x < image_width and 0 <= y < image_height:
-            panorama[y, x] = int(luminance[i] * 255)  # Scale luminance to [0, 255]
-
-    panorama = cv2.medianBlur(panorama, 3)
-
-    return panorama
+    panorama[image_y, image_x] = _as_uint8_intensity(intensity)
+    return cv2.medianBlur(panorama, 3)
 
 
 # colorize pointcloud using matplotlib colormap
@@ -706,10 +721,17 @@ def transform(pcd, transformation=None, translate=None, scale=None, euler_rotate
 #------------------------------------------------------------------------------------------------
 # pointcloud Lookup
 
-def angular_from_cartesian(cartesian_points):
-    r = np.sqrt(np.sum(cartesian_points**2, axis=1)) + 1e-10  # hack: avoid division by zero
-    theta = np.arccos(cartesian_points[:, 2] / r)
-    phi = np.arctan2(cartesian_points[:, 1], cartesian_points[:, 0])
+def angular_from_cartesian(cartesian_points, center=(0, 0, 0)):
+    """Spherical coordinates ``(theta, r, phi)`` of each point about ``center``.
+
+    ``center`` is the projection origin (the effective fisheye/equirect nodal
+    point). Moving it changes both the direction to each point and their ordering,
+    which is exactly what panoramic extrinsic calibration solves for.
+    """
+    points = np.asarray(cartesian_points, dtype=float)[:, :3] - np.asarray(center, dtype=float)
+    r = np.sqrt(np.sum(points**2, axis=1)) + 1e-10  # hack: avoid division by zero
+    theta = np.arccos(np.clip(points[:, 2] / r, -1.0, 1.0))
+    phi = np.arctan2(points[:, 1], points[:, 0])
     angular_points = np.stack([theta, r, phi], axis=1)
     return angular_points
 
@@ -756,9 +778,8 @@ if __name__ == "__main__":
     '''
 
     from config import Config
-    from visualization import visualize
 
-    scan_id = "261011-1731"
+    scan_id = "261012-0037"
 
     config = Config()
     config.init(scan_id=scan_id)
@@ -771,7 +792,7 @@ if __name__ == "__main__":
     # CREATE PANORAMA FROM LUMINANCE
     lidar_pano = get_lidar_pano(pcd, image_width=2048, image_height=1024)
     cv2.imwrite(os.path.join(config.scan_dir, f'{config.scan_id}_lidar.jpg'), lidar_pano)
-    cv2.imshow("Pano from Lidar data", lidar_pano)
-    cv2.waitKey(0)
+    # cv2.imshow("Pano from Lidar data", lidar_pano)
+    # cv2.waitKey(0)
 
-    visualize([pcd], view="front", unlit=True)
+    # visualize([pcd], view="front", unlit=True)
