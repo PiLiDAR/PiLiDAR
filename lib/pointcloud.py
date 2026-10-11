@@ -78,7 +78,9 @@ def process_raw(config, save=True):
         # LEVEL THE CLOUD (one rotation at the end, after coloring: the panorama is
         # referenced to the device frame, so level only once the colours are set)
         if imu_up is not None:
-            pcd = transform(pcd, transformation=leveling_rotation(imu_up).as_matrix())
+            leveling = np.eye(4)
+            leveling[:3, :3] = leveling_rotation(imu_up).as_matrix()
+            pcd = transform(pcd, transformation=leveling)
             print("\nleveled point cloud to gravity.")
 
         if save:
