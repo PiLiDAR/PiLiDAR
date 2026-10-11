@@ -69,7 +69,7 @@ The test suite passes in CI on desktop machines without physical hardware or Ras
 **Objective:** Harden the acquisition layer for modern Raspberry Pi OS, eliminate serial packet drops at high baudrates, and ensure reliable motion control.
 
 ### Goals
-- Support Raspberry Pi OS Bookworm (Debian 12) and Raspberry Pi 4/5 hardware.
+- Support Raspberry Pi OS Bookworm (Debian 12); **Trixie (Debian 13) support is planned — the Pi will migrate soon** (verify lgpio/libcamera/Hugin/pymeshlab on Trixie, add it to the supported-OS matrix).
 - Ensure 100% packet integrity at 921,600 baud without buffer overruns.
 - Provide deterministic stepper motion and responsive hardware controls.
 

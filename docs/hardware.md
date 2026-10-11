@@ -81,6 +81,13 @@ Scan duration:
 - A4988 direction: GP26, step: GP19
 - A4988 microstepping mode: GP5, GP6, GP13
 
+> **LiDAR speed (PWM) control is LD06-only.** The LD06 was wired directly to the
+> Pi's UART0 + PWM0 (GP15/GP18), so hardware PWM on GP18 controlled its spin
+> speed (`LIDAR.LD06.PWM_COEFFS` = the curve-fit coefficients; `GPIO_SERIAL.ENABLE`
+> gates it). The **STL27L uses its own USB controller board**, which has no PWM
+> input — it spins at its fixed rate, so PWM control does not apply
+> (`STL27L.PWM_COEFFS` is `null`).
+
 
 ## FDM / 3D printing
 
