@@ -601,8 +601,8 @@ def merge_2D_points(raw_scan, z_step=1, ccw=False, position_offset=(0,0,0), angl
     z_angle = 0
 
     for i, points2d in enumerate(cartesian_list):
-        # insert a 0 in the Y column so the vertical 2D fan (X, Z) becomes 3D in the
-        # X-Z plane (disc normal = Y); the camera looks +Y and the LiDAR faces -Y
+        # insert 3D Y=0 after column 0 so 2D-Y becomes 3D-Z (stand the fan upright
+        # about X: its 2D length becomes the 3D height; the plane lies in X-Z, normal Y)
         points3d = np.insert(points2d, 1, values=0, axis=1)
 
         # Use the corresponding angle from the list if provided, otherwise use the fixed angle increment
