@@ -200,6 +200,44 @@ def main():
     cv2.imwrite(out, overlay)
     print(f"\noverlay (red=colour, green=lidar, yellow=match) -> {out}")
 
+    # --- also store the two input images (and their gradient maps) for inspection ---
+    #
+    # Render at a resolution the points actually FILL (the raw cloud is ~2M points,
+    # so 1440x720 is ~2 pts/px). Rendering at the colour pano's 3600x1800 would be
+    # ~0.3 pts/px -> a mostly-black, speckly image.
+    img_dir = os.path.join(scan_dir, "extrinsics")
+    os.makedirs(img_dir, exist_ok=True)
+
+    def _u8(x):
+        x = np.asarray(x, np.float32)
+        x = x - x.min()
+        return (x / (x.max() + 1e-9) * 255).astype(np.uint8)
+
+    save_w, save_h = 1440, 720
+    lidar_pano, lidar_mask = project_pano(pts, intensity, res.x, save_w, save_h)
+    # the reference AS USED (already flipped when --mirror), resized to match
+    ref_pano = cv2.resize(ref_gray, (save_w, save_h), interpolation=cv2.INTER_AREA)
+    lidar_edges = gradient_map(lidar_pano, save_w, save_h)
+    ref_edges = gradient_map(ref_pano, save_w, save_h)
+
+    overlay_save = np.zeros((save_h, save_w, 3), np.uint8)
+    overlay_save[..., 2] = (((ref_pano > 8) & (ref_edges > 0.15)) * 255).astype(np.uint8)   # red
+    overlay_save[..., 1] = (((lidar_mask > 0) & (lidar_edges > 0.15)) * 255).astype(np.uint8)  # green
+
+    def _save(name, img):
+        cv2.imwrite(os.path.join(img_dir, f"{args.scan_id}_calib_{name}.png"), img)
+
+    _save("lidar_intensity", lidar_pano)
+    _save("colour_gray", ref_pano)
+    _save("lidar_edges", _u8(lidar_edges))
+    _save("colour_edges", _u8(ref_edges))
+    _save("overlay", overlay_save)
+    stack = np.vstack([cv2.cvtColor(lidar_pano, cv2.COLOR_GRAY2BGR),
+                       np.full((4, save_w, 3), 255, np.uint8),
+                       cv2.cvtColor(ref_pano, cv2.COLOR_GRAY2BGR)])
+    _save("stack", stack)
+    print(f"saved input images (lidar/colour + edges + overlay) -> {img_dir}/")
+
     params = {"center_m": [cx, cy, cz], "yaw_deg": float(np.degrees(yaw)),
               "pitch_deg": float(np.degrees(pitch)), "roll_deg": float(np.degrees(roll)),
               "mirror": bool(args.mirror), "cost": float(res.fun)}

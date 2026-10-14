@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.8] - 2026-10-14
+
+### Fixed
+- **`*_lidar.jpg` was a grayscale copy of the colour panorama (circular).** The `lib/pointcloud.py` `__main__` built it via `get_lidar_pano(pcd)` from the *loaded PLY* — but that PLY holds panorama colours (`ENABLE_VERTEXCOLOUR=False` doesn't help, the file is already colourised), so the render reproduced the panorama it is supposed to calibrate against. It now renders from the **raw laser intensity** (`merge_2D_points` col 3) via `render_lidar_pano`.
+
+### Changed
+- **`experiments/calibrate_extrinsics.py`** now saves the images it uses (LiDAR intensity pano, colour grey, both gradient maps, overlay, stacked) to `scans/<id>/extrinsics/` for visual inspection, at a resolution the points actually fill (a sparse render is speckly and would mislead).
+- **`experiments/tune_angle_step.py`** (new) — interactively tune a per-step angle mapping `angle = SCALE*z + OFFSET` and watch doubled/fanned walls merge; `--stride` (default 10) subsamples slices for a fast first impression.
+
 ## [2.6.7] - 2026-10-14
 
 ### Fixed

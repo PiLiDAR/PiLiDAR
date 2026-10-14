@@ -774,7 +774,9 @@ def angular_lookup(angular_points, pano, scale=1, degrees=False, z_rotate=0, as_
 
 if __name__ == "__main__":
     '''
-    generate lidar_panorama from raw data
+    generate a LiDAR intensity panorama from the RAW scan (not the coloured PLY —
+    the PLY holds panorama colours, so re-projecting it would reproduce the very
+    panorama we want to calibrate against).
     '''
 
     from config import Config
@@ -783,14 +785,15 @@ if __name__ == "__main__":
 
     config = Config()
     config.init(scan_id=scan_id)
-    config.set(False, "ENABLE_VERTEXCOLOUR")
 
-    pano = cv2.imread(config.pano_path)
+    raw_scan = load_raw_scan(config.raw_path)
+    p3 = merge_2D_points(raw_scan,
+                         position_offset=(0, config.get("3D", "Y_OFFSET"), 0),
+                         angle_offset=config.get("LIDAR", "LIDAR_OFFSET_ANGLE"))
+    intensity = p3[:, 3]                                   # raw laser intensity
 
-    pcd = load_pointcloud(config.pcd_path)
-
-    # CREATE PANORAMA FROM LUMINANCE
-    lidar_pano = get_lidar_pano(pcd, image_width=2048, image_height=1024)
+    # CREATE PANORAMA FROM LIDAR INTENSITY
+    lidar_pano = render_lidar_pano(p3[:, :3], intensity, image_width=2048, image_height=1024)
     cv2.imwrite(os.path.join(config.scan_dir, f'{config.scan_id}_lidar.jpg'), lidar_pano)
     # cv2.imshow("Pano from Lidar data", lidar_pano)
     # cv2.waitKey(0)
