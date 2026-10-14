@@ -24,17 +24,18 @@ print(r'''
 ''')
 
 
-# The service (gpio_interrupt.py) cuts the LiDAR USB power at boot. Power it back
-# on BEFORE Config() resolves the serial port: if the LiDAR VBUS is cut, the port
-# is absent and Config falls back to /dev/ttyS0. The power is cut again right
-# after acquisition (before post-processing); atexit is the safety net for a crash
-# and SIGTERM is converted to SystemExit so the finally/atexit handlers still run.
+# The service (gpio_interrupt.py) cuts the LiDAR USB power at boot. The LiDAR is
+# powered on only when its read loop is about to start (see MAIN) so its power
+# draw does not drain the battery during the photo phase. atexit is the safety
+# net for a crash and SIGTERM is converted to SystemExit so the finally/atexit
+# handlers still run.
 def _on_terminate(signum, frame):
     raise SystemExit(128 + signum)
 
 
-if get_platform() == 'RaspberryPi' and usb_power.load_settings()["enabled"]:
-    usb_power.lidar_on()
+on_pi = get_platform() == 'RaspberryPi'
+usb_power_enabled = usb_power.load_settings()["enabled"]
+if on_pi and usb_power_enabled:
     atexit.register(usb_power.lidar_off)
     signal.signal(signal.SIGTERM, _on_terminate)
 
@@ -65,31 +66,9 @@ stepper = A4988(config.get("STEPPER", "pins", "DIR_PIN"),
                 gear_ratio=config.get("STEPPER", "GEAR_RATIO"))
 
 
-# initialize lidar
-if enable_lidar:
-    lidar = Lidar(config, visualization=None)
-
-    # callback function for lidar.read_loop()
-    def move_steps_callback():
-        stepper.move_steps(config.steps if config.SCAN_ANGLE > 0 else -config.steps)
-        lidar.z_angle = stepper.get_current_angle()
-
-        # # DEBUG: take photo at each step
-        # imgpath = os.path.join(config.scan_dir, f"{format_value(lidar.z_angle, 2)}.jpg")
-        # cam.take_photo(path=imgpath,
-        #                exposure_time=current_exposure_time,
-        #                gain=current_gain,
-        #                awbgains=current_awbgains)
-
-        if enable_IMU:
-            # euler = imu.get_euler_angles()
-            # print(f'{format_value(lidar.z_angle, 2)} | Euler: x {format_value(euler.x, 2)} y {format_value(euler.y, 2)} z {format_value(euler.z, 2)}')
-            quat_values = imu.get_quat_values()
-            quat_list.append(quat_values)  # [lidar.z_angle, *quat_values]
-
-    if not enable_cam:
-        # wait for lidar to lock rotational speed
-        sleep(2)
+# the LiDAR is constructed (and USB-powered) later, just before its read loop
+# (see MAIN), so its power draw does not drain the battery during the photo phase
+lidar = None
 
 # MAIN
 try:
@@ -106,8 +85,8 @@ try:
 
             IMGCOUNT = config.get("PANO", "IMGCOUNT")
             for i in range(IMGCOUNT):
-                lidar.z_angle = stepper.get_current_angle()
-                formatted_angle = format_value(lidar.z_angle, config.get("ANGULAR_DIGITS"))
+                photo_angle = stepper.get_current_angle()
+                formatted_angle = format_value(photo_angle, config.get("ANGULAR_DIGITS"))
 
                 print(f"\nTaking photo {i+1}/{IMGCOUNT} | Angle: {formatted_angle}")
                 imgpath = os.path.join(config.img_dir, f"image_{formatted_angle}.jpg")
@@ -136,8 +115,28 @@ try:
             sleep(0.5)
 
 
-    # 180° SCAN
+    # LIDAR SCAN — power the LiDAR on only now (after the photos) to save battery
     if enable_lidar:
+        if on_pi and usb_power_enabled:
+            print("\nPowering on LiDAR USB...")
+            usb_power.lidar_on()
+            config.PORT = config.resolve_port()   # the port enumerates only once powered
+
+        lidar = Lidar(config, visualization=None)
+
+        # callback function for lidar.read_loop()
+        def move_steps_callback():
+            stepper.move_steps(config.steps if config.SCAN_ANGLE > 0 else -config.steps)
+            lidar.z_angle = stepper.get_current_angle()
+
+            if enable_IMU:
+                quat_values = imu.get_quat_values()
+                quat_list.append(quat_values)  # [lidar.z_angle, *quat_values]
+
+        if not enable_cam:
+            # wait for the lidar to lock rotational speed
+            sleep(2)
+
         print("\nLIDAR STARTED...\n")
         lidar.read_loop(callback=move_steps_callback, max_packages=config.max_packages)
 
@@ -156,11 +155,11 @@ try:
 
 finally:
     print("\nPiLiDAR STOPPED\n")
-    if enable_lidar:
+    if lidar is not None:
         lidar.close()
 
-        if enable_IMU:
-            imu.close()
+    if enable_IMU:
+        imu.close()
 
     stepper.close()
 

@@ -3,6 +3,12 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.5] - 2026-10-14
+
+### Changed
+- **LiDAR USB power is deferred until the scan actually starts.** Previously `PiLiDAR.py` powered the LiDAR on at launch, so it spun (and drained the battery) through the whole photo/HDR phase. Now the power-on — and the `Lidar` construction + serial-port resolution that needs it (the port only enumerates while powered) — happens immediately before the read loop. `atexit` still guarantees power-off on any exit. No-op off the Pi.
+  - Side effect: the photo loop no longer touches `lidar.z_angle` (it never needed the LiDAR); it reads the stepper angle directly.
+
 ## [2.6.4] - 2026-10-12
 
 ### Added
