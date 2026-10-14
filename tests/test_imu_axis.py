@@ -229,3 +229,24 @@ def test_solve_mounting_default_floor_normal_is_in_yz_plane():
     expected = np.array([0.0, np.sin(np.radians(tilt)), np.cos(np.radians(tilt))])
     assert np.allclose(M @ axis_body, [0, 0, 1], atol=1e-6)
     assert np.allclose(M @ gravity_body, expected, atol=1e-6)
+
+
+def test_scanner_orientation_at_zero_is_the_body_to_world_rotation():
+    """scanner_orientation returns the object->gravity rotation at stepper 0."""
+    from lib.imu_orientation import scanner_orientation
+
+    c_body = np.array([1.0, 0.0, 0.0])
+    axis_world = np.array([0.0, np.sin(np.radians(11.0)), np.cos(np.radians(11.0))])
+    wxyz, z_deg, mount = _synthesise_sweep(axis_world, c_body)
+
+    rot = scanner_orientation(wxyz, z_deg)
+    assert np.allclose(rot.as_matrix(), mount.as_matrix(), atol=1e-3)
+    # it is the body->gravity rotation at stepper 0, so it maps the turntable axis
+    # (c_body) onto the rotation axis as seen in gravity space (axis_world)
+    assert np.isclose(abs(np.dot(rot.apply(c_body), axis_world)), 1.0, atol=1e-2)
+
+
+def test_scanner_orientation_none_without_quaternions():
+    from lib.imu_orientation import scanner_orientation
+    assert scanner_orientation(None, None) is None
+    assert scanner_orientation([], []) is None

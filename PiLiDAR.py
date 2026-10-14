@@ -149,6 +149,12 @@ try:
         if enable_IMU:
             # inject IMU data into raw_scan dict
             raw_scan["quaternions"] = quat_list
+            # the scanner's IMU body->gravity orientation at stepper 0 (DMP output;
+            # rotation axis = body +Y). Store it for later gravity leveling.
+            from lib.imu_orientation import scanner_orientation
+            q_obj2grav = scanner_orientation(quat_list, lidar.z_angles)
+            if q_obj2grav is not None:
+                raw_scan["scanner_orientation_xyzw"] = q_obj2grav.as_quat().tolist()
 
         save_raw_scan(lidar.raw_path, raw_scan)
 

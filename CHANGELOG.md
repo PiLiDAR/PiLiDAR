@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.10] - 2026-10-14
+
+### Added
+- **Scanner orientation stored per scan.** `lib.imu_orientation.scanner_orientation()` returns the IMU **body → gravity** rotation at stepper angle 0 (the DMP quaternion there); `PiLiDAR.py` and the raw sidecar record it as `scanner_orientation_xyzw`. This is the *object→gravity* orientation of the scanner (rotation axis = IMU body +Y, forward = body +Z); it can later bring a cloud assembled in object space upright, but that is deliberately not applied yet.
+
+### Changed
+- **Object space vs. gravity space made explicit.** The cloud and the LiDAR/colour panorama are assembled and referenced purely in **object space** (scanner up = rotation axis = +Z), independent of gravity; leveling to gravity is a separate, later step. Calibration now targets the camera/LiDAR/IMU position+orientation offsets **relative to the rotation axis** in object space.
+- Extracted `_reference_mask()` (shared by `reference_gravity`).
+
 ## [2.6.9] - 2026-10-14
 
 ### Fixed

@@ -215,6 +215,27 @@ def imu_up_vector(quaternions, scale=16384.0):
     return _unit(g_body.mean(axis=0))
 
 
+def _reference_mask(quaternions, z_angles, window_deg=2.0):
+    """Boolean mask (same length as ``quaternions``) of the reference-attitude samples.
+
+    The sweep samples one quaternion per plane, but the (dropped) warm-up plane
+    is still sampled at a STALE pre-sweep attitude. If there is one more
+    quaternion than plane, the *leading* (warm-up) sample is dropped so the arrays
+    align; the mask marks the samples co-located with stepper angle ~ 0.
+    """
+    n_q = len(np.asarray(quaternions, dtype=float))
+    z = np.asarray(z_angles, dtype=float)
+    mask = np.zeros(n_q, dtype=bool)
+    drop = max(0, n_q - len(z))
+    zz = z[:n_q - drop]
+    if len(zz) == 0:
+        mask[:] = True
+        return mask
+    ref = int(np.argmin(np.abs(zz)))
+    mask[drop:] = np.abs(((zz - zz[ref] + 180.0) % 360.0) - 180.0) <= window_deg
+    return mask
+
+
 def reference_gravity(quaternions, z_angles=None, scale=16384.0, window_deg=2.0):
     """Gravity direction in the IMU body frame at the sweep's **reference attitude**.
 
@@ -244,19 +265,43 @@ def reference_gravity(quaternions, z_angles=None, scale=16384.0, window_deg=2.0)
         k = min(len(g_body), 5)
         return _unit(g_body[:k].mean(axis=0))
 
-    z = np.asarray(z_angles, dtype=float)
-    # The sweep samples one quaternion per plane, but the (dropped) warm-up plane
-    # is still sampled -- and at a STALE pre-sweep attitude. If there is one more
-    # quaternion than plane, drop the leading (warm-up) sample so the arrays align
-    # (the residual one-step lead is negligible for gravity).
-    if len(g_body) > len(z):
-        g_body = g_body[len(g_body) - len(z):]
-    n = min(len(g_body), len(z))
-    g_body = g_body[:n]
-    z = z[:n]
-    ref = int(np.argmin(np.abs(z)))                # sample nearest 0 deg
-    near = np.abs(((z - z[ref] + 180.0) % 360.0) - 180.0) <= window_deg
-    return _unit(g_body[near].mean(axis=0))
+    g_body = g_body[_reference_mask(quaternions, z_angles, window_deg)]
+    return _unit(g_body.mean(axis=0))
+
+
+def scanner_orientation(quaternions, z_angles, scale=16384.0):
+    """IMU **body -> gravity** orientation at stepper angle 0 (the DMP output).
+
+    The IMU is fixed to the rotating platform, so its quaternion at stepper 0 is
+    the scanner's fixed orientation relative to gravity, expressed in the IMU body
+    frame (X=left, Y=up, Z=forward). In this frame the **turntable axis is the body
+    +Y** (it maps to gravity up) and body +Z is the scanner's forward direction.
+
+    This is a *body*-frame rotation. To get the rotation that takes the assembled
+    cloud (object space, +Z = rotation axis) to gravity, compose with the mounting:
+    ``object_to_gravity = scanner_orientation(...) * Rotation(mounting).inv()``.
+
+    Use the single sample nearest stepper 0 (not a window average: the window spans
+    real rotation about the axis). Returns a :class:`scipy.spatial.transform.Rotation`
+    or ``None``.
+    """
+    if quaternions is None or len(quaternions) == 0:
+        return None
+    q = np.asarray(quaternions, dtype=float) / scale
+    q /= np.linalg.norm(q, axis=1, keepdims=True)
+
+    idx = 0
+    if z_angles is not None and len(z_angles):
+        z = np.asarray(z_angles, dtype=float)
+        drop = max(0, len(q) - len(z))
+        zz = z[:len(q) - drop]
+        if len(zz):
+            idx = drop + int(np.argmin(np.abs(zz)))
+
+    qxyzw = q[idx, [1, 2, 3, 0]]
+    if not np.all(np.isfinite(qxyzw)):
+        return None
+    return R.from_quat(qxyzw)
 
 
 def leveling_rotation(up_vector):

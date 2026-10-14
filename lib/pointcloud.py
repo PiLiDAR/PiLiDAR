@@ -121,6 +121,14 @@ def _write_metadata(path, data, cartesian, arrays):
         meta["n_quaternions"] = int(len(arrays["quaternions"]))
         # the IMU also samples the dropped warm-up plane -> one extra leading quat
         meta["warmup_quaternion_extra"] = int(len(arrays["quaternions"]) - len(cartesian))
+        # IMU body->gravity orientation at stepper 0 (rotation axis = body +Y)
+        try:
+            from lib.imu_orientation import scanner_orientation
+            rot = scanner_orientation(arrays["quaternions"], data.get("z_angles"))
+            if rot is not None:
+                meta["scanner_orientation_xyzw"] = [float(v) for v in rot.as_quat()]
+        except Exception:
+            pass
     else:
         meta["has_quaternions"] = False
     with open(path, "w") as f:
