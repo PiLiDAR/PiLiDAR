@@ -23,6 +23,32 @@ vertex-colorized 3D point cloud.
     - aligning multiple scenes using **global registration** and **ICP fine-tuning**
     - **Poisson Surface Meshing** (very slow on Pi4, recommended to run on PC)
 
+## Coordinate space
+
+Everything is assembled in **object space** — the scanner's own frame, fixed to
+the turntable and **independent of gravity**. Gravity leveling is a separate,
+later step (see [docs/imu_leveling.md](docs/imu_leveling.md)).
+
+| axis | meaning |
+|---|---|
+| **+Z** | scanner **up** = turntable rotation axis (floor at −Z, ceiling at +Z) |
+| **+Y** | **forward** — the direction the camera looks at stepper angle 0° |
+| **X** | the remaining horizontal axis (left / right) |
+
+- The **camera** nodal point sits on the rotation axis at the origin and looks
+  **+Y** (pan = 0° by definition; its tilt/roll come from the stitched panorama).
+- The **LiDAR** faces **−Y** (mounted back-to-back with the camera). At stepper 0°
+  its vertical disc lies in the **X–Z plane**; the disc **roll** axis is **Y**.
+  As the turntable turns, the disc revolves about +Z and the point cloud is built
+  by revolving each fan about `(0,0,1)`.
+- **LiDAR mount** (`"3D"` / `"LIDAR"` in `config.json`): `Y_OFFSET` = position on
+  the forward axis (the LiDAR's −Y side), `Z_OFFSET` = LiDAR **height above** the
+  camera (positive), `LIDAR_OFFSET_ANGLE` = disc roll. The offset within the disc
+  plane (X) is assumed 0.
+- The camera's **panorama** is the angular reference: cloud → equirect uses
+  `VERTEXCOLOUR.CENTER_M` + `ROTATE_DEG` (see `lib.pointcloud.projection_params`),
+  the same projection used for the LiDAR intensity panorama and for vertex colors.
+
 ## preliminary results
 single scans, no registration, no post processing.
 klick the images to open the pointclouds in Sketchfab.
