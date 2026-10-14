@@ -19,14 +19,32 @@ Target: a tilted scan (~10–15°) should, after leveling, have a floor plane wi
 
 There are four frames in play. Getting these right is the whole problem.
 
-### 1. Scanner / device frame (what the cloud is assembled in)
+### 1. Scanner / object frame (what the cloud is assembled in)
 
-- **Z = up** (the turntable's rotation axis).
-- The LiDAR is mounted **vertically** on the back of the scanner, so a 2D LiDAR
-  plane's normal ("local up") is perpendicular to Z; the plane spans X–Y.
+**Object space** — independent of gravity. The cloud and the LiDAR/colour
+panorama are built here; gravity leveling is a separate, later step.
+
+| axis | meaning |
+|---|---|
+| **+Z** | scanner **up** = turntable rotation axis (floor at −Z, ceiling at +Z) |
+| **Y** | the camera ↔ LiDAR mount axis; the **LiDAR faces −Y** |
+| **X** | the **camera's forward** direction at stepper 0° |
+
+- The camera nodal point sits **on the rotation axis** at the origin (its pan is
+  0° by definition); the LiDAR is mounted **back-to-back** with it — a vertical
+  disc whose normal is the mount axis, offset from the axis.
 - `merge_2D_points()` builds the cloud by inserting `Y=0` into each 2D fan and
   revolving it about `up_vector=(0,0,1)` by the negative stepper angle.
-- So **by construction the cloud's up is +Z**, and a *level* rig produces a
+- The LiDAR mount (`"3D"` in config):
+  - `Y_OFFSET` — position along the mount axis. **−37.5 mm** (the LiDAR faces
+    −Y and sits on that side).
+  - `Z_OFFSET` — the LiDAR's **height relative to the camera**; **+41.9 mm**
+    because it sits **above** the camera (a positive height means `z_lidar >
+    z_camera`). Applied as a vertical translation of the assembled cloud.
+  - `LIDAR.LIDAR_OFFSET_ANGLE` — disc **roll** (rotation about the mount axis).
+  - The LiDAR's **in-plane horizontal offset** (within the vertical disc) is
+    assumed 0.
+- So **by construction the cloud's up is +Z**; a *level* rig then produces a
   cloud whose floor is horizontal.
 
 ### 2. IMU frame (the MPU6050 body)
