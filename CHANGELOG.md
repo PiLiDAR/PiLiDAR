@@ -3,6 +3,14 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.6] - 2026-10-14
+
+### Added
+- **`experiments/calibrate_extrinsics.py`** — LiDAR↔camera panoramic extrinsic calibration. Renders the intensity LiDAR panorama under a parameterised projection (projection **centre** + yaw/pitch/roll) and maximises the masked zero-mean NCC of gradient maps against the stitched colour panorama (multi-scale coarse→fine, Nelder-Mead). Writes an overlay (red=colour edges, green=LiDAR edges, yellow=match) for visual verification. This recovers the parameters that then drive vertex colouring.
+
+### Notes
+- The 360° sweep (`STEPPER.SCAN_ANGLE=360`) produces ~4.3 M points; `process_raw` **OOM-kills on the 4 GB Pi** (acquisition + pano are fine — only the on-Pi 3D step). Processing must run on the desktop (or on Pi with filtering/lower memory).
+
 ## [2.6.5] - 2026-10-14
 
 ### Changed

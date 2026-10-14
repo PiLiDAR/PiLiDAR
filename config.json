@@ -70,7 +70,7 @@
             "MS_PINS": [5, 6, 13]
         },
         "RELAY_PIN": 24,
-        "SCAN_ANGLE": 180,
+        "SCAN_ANGLE": 360,
         "GEAR_RATIO": "1 + 38/14",
         "MICROSTEPS": 16,
         "STEP_DELAY": 0.0005,
