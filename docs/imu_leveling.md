@@ -27,23 +27,25 @@ panorama are built here; gravity leveling is a separate, later step.
 | axis | meaning |
 |---|---|
 | **+Z** | scanner **up** = turntable rotation axis (floor at −Z, ceiling at +Z) |
-| **Y** | the camera ↔ LiDAR mount axis; the **LiDAR faces −Y** |
-| **X** | the **camera's forward** direction at stepper 0° |
+| **+Y** | the **forward** direction (the direction the camera looks at stepper 0°) |
+| **X** | the remaining horizontal axis (left/right) |
 
-- The camera nodal point sits **on the rotation axis** at the origin (its pan is
-  0° by definition); the LiDAR is mounted **back-to-back** with it — a vertical
-  disc whose normal is the mount axis, offset from the axis.
+- The camera nodal point sits **on the rotation axis** at the origin and looks
+  **+Y** (its pan is 0° by definition). The LiDAR is mounted **back-to-back** with
+  it, so it faces **−Y** — the same axis, opposite sign — offset from the axis.
+- At stepper 0° the LiDAR's vertical disc therefore lies in the **X–Z plane**, and
+  its **roll axis is Y** (the disc normal): spin about Y tilts the fan within that
+  plane. As the turntable turns, the disc (and its normal) revolve about +Z.
 - `merge_2D_points()` builds the cloud by inserting `Y=0` into each 2D fan and
   revolving it about `up_vector=(0,0,1)` by the negative stepper angle.
 - The LiDAR mount (`"3D"` in config):
-  - `Y_OFFSET` — position along the mount axis. **−37.5 mm** (the LiDAR faces
-    −Y and sits on that side).
+  - `Y_OFFSET` — position along the mount/forward axis; **−37.5 mm** (the LiDAR
+    faces −Y, so it sits on the −Y side).
   - `Z_OFFSET` — the LiDAR's **height relative to the camera**; **+41.9 mm**
-    because it sits **above** the camera (a positive height means `z_lidar >
-    z_camera`). Applied as a vertical translation of the assembled cloud.
-  - `LIDAR.LIDAR_OFFSET_ANGLE` — disc **roll** (rotation about the mount axis).
-  - The LiDAR's **in-plane horizontal offset** (within the vertical disc) is
-    assumed 0.
+    because it sits **above** the camera. Applied as a vertical translation of the
+    assembled cloud.
+  - `LIDAR.LIDAR_OFFSET_ANGLE` — disc **roll** (rotation about Y).
+  - The LiDAR's **offset within the disc plane** (the X direction) is assumed 0.
 - So **by construction the cloud's up is +Z**; a *level* rig then produces a
   cloud whose floor is horizontal.
 
