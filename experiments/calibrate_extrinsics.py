@@ -77,11 +77,13 @@ def gradient_map(gray, w, h):
 def project_pano(pts, intensity, params, w, h, valid_only=True):
     """Render the LiDAR intensity panorama under the current projection params.
 
-    ``params`` = (cx, cy, cz, yaw, pitch, roll) in radians / metres.
+    ``params`` = (cx, cy, cz, rx, ry, rz): centre (m) + euler xyz (deg) — the SAME
+    convention as ``VERTEXCOLOUR.CENTER_M`` / ``ROTATE_DEG`` in config, so the
+    result drops straight in.
     Returns (gray_uint8, valid_mask).
     """
-    cx, cy, cz, yaw, pitch, roll = params
-    rot = R.from_euler('zyx', [yaw, pitch, roll]).as_matrix()
+    cx, cy, cz, rx, ry, rz = params
+    rot = R.from_euler('xyz', [rx, ry, rz], degrees=True).as_matrix()
     p = (pts - np.array([cx, cy, cz])) @ rot.T
     ang = angular_from_cartesian(p)
     x, y = get_sampling_coordinates(ang, (h, w))
@@ -165,15 +167,14 @@ def main():
     cpts, cI = subsample(pts, intensity, OBJ_POINTS)
     ref_edge_c, ref_valid_c = build_reference(ref_gray, CW, CH)
     cost_c = make_cost(cpts, cI, CW, CH, ref_edge_c, ref_valid_c)
-    print("coarse search over yaw/pitch ...")
+    print("coarse search over ry(pitch)/rz(yaw) ...")
     best = None
-    for yaw in np.radians(np.arange(-180, 180, 10)):
-        for pitch in np.radians(np.arange(-20, 20, 5)):
-            c = cost_c((0.0, 0.0, 0.0, yaw, pitch, 0.0))
+    for ry in np.arange(-20, 20, 5):
+        for rz in np.arange(-180, 180, 10):
+            c = cost_c((0.0, 0.0, 0.0, 0.0, ry, rz))
             if best is None or c < best[0]:
-                best = (c, (0.0, 0.0, 0.0, yaw, pitch, 0.0))
-    yaws = np.array([best[1][3]])
-    print(f"  init cost {best[0]:.4f}  yaw={np.degrees(best[1][3]):.1f} pitch={np.degrees(best[1][4]):.1f}")
+                best = (c, (0.0, 0.0, 0.0, 0.0, ry, rz))
+    print(f"  init cost {best[0]:.4f}  ry={best[1][4]:.1f} rz={best[1][5]:.1f}")
 
     # --- stage 2: refine all six params at working resolution ---
     fpts, fI = subsample(pts, intensity, OBJ_POINTS)
@@ -182,13 +183,11 @@ def main():
     print(f"Nelder-Mead refinement ({len(fpts)} pts, {WRK_W}x{WRK_H}) ...")
     res = minimize(cost, best[1], method="Nelder-Mead",
                    options={"maxiter": 3000, "xatol": 1e-4, "fatol": 1e-7})
-    cx, cy, cz, yaw, pitch, roll = res.x
-    print(f"\ncost {res.fun:.4f}  (yaw array={yaws.tolist()})")
+    cx, cy, cz, rx, ry, rz = res.x
+    print(f"\ncost {res.fun:.4f}")
     print(f"  centre (m) : [{cx:.4f}, {cy:.4f}, {cz:.4f}]  "
           f"({cx*1000:.1f}, {cy*1000:.1f}, {cz*1000:.1f} mm)")
-    print(f"  yaw   : {np.degrees(yaw):.2f} deg")
-    print(f"  pitch : {np.degrees(pitch):.2f} deg")
-    print(f"  roll  : {np.degrees(roll):.2f} deg")
+    print(f"  rotate xyz (deg): [{rx:.2f}, {ry:.2f}, {rz:.2f}]")
 
     # --- overlay for visual verification ---
     gray, mask = project_pano(fpts, fI, res.x, WRK_W, WRK_H)
@@ -238,8 +237,8 @@ def main():
     _save("stack", stack)
     print(f"saved input images (lidar/colour + edges + overlay) -> {img_dir}/")
 
-    params = {"center_m": [cx, cy, cz], "yaw_deg": float(np.degrees(yaw)),
-              "pitch_deg": float(np.degrees(pitch)), "roll_deg": float(np.degrees(roll)),
+    params = {"CENTER_M": [round(cx, 5), round(cy, 5), round(cz, 5)],
+              "ROTATE_DEG": [round(rx, 3), round(ry, 3), round(rz, 3)],
               "mirror": bool(args.mirror), "cost": float(res.fun)}
     print("\nconfig snippet:\n" + json.dumps({"VERTEXCOLOUR": {"PROJECTION": params}}, indent=2))
 

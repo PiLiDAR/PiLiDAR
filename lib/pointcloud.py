@@ -193,12 +193,13 @@ def process_raw(config, save=True):
             pcd = transform(pcd, scale=scene_scale)
 
 
-        # ANGULAR LOOKUP ("TEXTURING")
+        # ANGULAR LOOKUP ("TEXTURING") — uses the SAME projection as the LiDAR pano
         if config.get("ENABLE_VERTEXCOLOUR") and os.path.exists(config.pano_path):
-            colors = angular_lookup(angular_from_cartesian(np.asarray(pcd.points)),  # angular_points
+            center, rotation = projection_params(config)
+            projected = project_points(np.asarray(pcd.points), center, rotation)
+            colors = angular_lookup(angular_from_cartesian(projected),  # angular_points
                                     cv2.imread(config.pano_path),  # pano
-                                    scale=config.get("VERTEXCOLOUR","SCALE"),
-                                    z_rotate=config.get("VERTEXCOLOUR","Z_ROTATE"))
+                                    scale=config.get("VERTEXCOLOUR","SCALE"))
 
             pcd.colors = o3d.utility.Vector3dVector(np.asarray(colors))
 
@@ -280,6 +281,16 @@ def process_raw(config, save=True):
     pcd = pcd_from_np(array_3D, estimate_normals=True, max_nn=50, radius=normal_radius)
     print("\n2D->3D merge completed.")
 
+    # LiDAR intensity panorama — rendered from the FINAL-frame points with the same
+    # projection the colouring uses, so it lines up with the colour panorama.
+    if save:
+        normal_radius = config.get("3D", "NORMAL_RADIUS")
+        final_points = transform(pcd, translate=(0, 0, config.get("3D", "Z_OFFSET")))
+        scene_scale = config.get("3D", "SCALE")
+        if scene_scale != 1:
+            final_points = transform(final_points, scale=scene_scale)
+        save_lidar_pano(config, np.asarray(final_points.points), array_3D[:, 3])
+
     pcd = postprocess_3D(config, pcd, save=save, imu_up=imu_up)
     print("\nprocessing 3D completed.")
     return pcd
@@ -353,6 +364,48 @@ def filter_by_reference(original_pcd, reference_pcd, radius=0.02):
 
 
 #------------------------------------------------------------------------------------------------
+
+def projection_params(config):
+    """Return ``(center, rotation)`` for the equirectangular projection.
+
+    ONE place defines the projection used by both the LiDAR intensity panorama
+    (calibration) and the vertex colouring, so they can never disagree.
+
+    - ``VERTEXCOLOUR.CENTER_M``  = [x, y, z] projection origin in the final cloud
+      frame (metres); default the origin.
+    - ``VERTEXCOLOUR.ROTATE_DEG`` = [rx, ry, rz] euler (xyz, deg) applied after the
+      centre subtraction; the vertical knob is ``ry`` (pitch). For backward
+      compatibility ``VERTEXCOLOUR.Z_ROTATE`` is used as ``rz`` when
+      ``ROTATE_DEG`` is absent.
+
+    Returns ``(np.ndarray(3), scipy Rotation)``.
+    """
+    center = np.asarray(config.get("VERTEXCOLOUR", "CENTER_M") or [0.0, 0.0, 0.0], dtype=float)
+    rotate = config.get("VERTEXCOLOUR", "ROTATE_DEG")
+    if rotate is None:
+        rotate = [0.0, 0.0, float(config.get("VERTEXCOLOUR", "Z_ROTATE") or 0.0)]
+    return center, R.from_euler("xyz", rotate, degrees=True)
+
+
+def project_points(points, center, rotation):
+    """Translate to the projection centre and rotate into the camera frame."""
+    return rotation.apply(np.asarray(points, dtype=float) - center)
+
+
+def save_lidar_pano(config, points, intensity, width=2048, height=1024):
+    """Save `<scan_id>_lidar.jpg`: a LiDAR **intensity** panorama.
+
+    Renders the *final-frame* cloud points (same frame the colouring uses) with
+    the shared projection (:func:`projection_params`), so it lines up with the
+    stitched colour panorama instead of being a different projection. Must be fed
+    the RAW laser intensity (not the coloured cloud).
+    """
+    center, rotation = projection_params(config)
+    pano = render_lidar_pano(project_points(points, center, rotation), intensity,
+                             width, height, center=(0, 0, 0))
+    cv2.imwrite(os.path.join(config.scan_dir, f"{config.scan_id}_lidar.jpg"), pano)
+    return pano
+
 
 def get_lidar_pano(pcd, image_width, image_height, intensity=None, center=(0, 0, 0), z_rotate=0):
     """Render a grayscale panorama from a point cloud, coloured by laser intensity.
@@ -774,9 +827,8 @@ def angular_lookup(angular_points, pano, scale=1, degrees=False, z_rotate=0, as_
 
 if __name__ == "__main__":
     '''
-    generate a LiDAR intensity panorama from the RAW scan (not the coloured PLY —
-    the PLY holds panorama colours, so re-projecting it would reproduce the very
-    panorama we want to calibrate against).
+    regenerate a LiDAR intensity panorama (`<scan_id>_lidar.jpg`) from the raw scan,
+    using the SAME projection as the vertex colouring (see `save_lidar_pano`).
     '''
 
     from config import Config
@@ -790,12 +842,9 @@ if __name__ == "__main__":
     p3 = merge_2D_points(raw_scan,
                          position_offset=(0, config.get("3D", "Y_OFFSET"), 0),
                          angle_offset=config.get("LIDAR", "LIDAR_OFFSET_ANGLE"))
-    intensity = p3[:, 3]                                   # raw laser intensity
+    # final frame (mm -> m, Z_OFFSET) so the centre matches the colouring frame
+    pts = p3[:, :3].astype(float) * config.get("3D", "SCALE")
+    pts[:, 2] += config.get("3D", "Z_OFFSET") * config.get("3D", "SCALE")
 
-    # CREATE PANORAMA FROM LIDAR INTENSITY
-    lidar_pano = render_lidar_pano(p3[:, :3], intensity, image_width=2048, image_height=1024)
-    cv2.imwrite(os.path.join(config.scan_dir, f'{config.scan_id}_lidar.jpg'), lidar_pano)
-    # cv2.imshow("Pano from Lidar data", lidar_pano)
-    # cv2.waitKey(0)
-
-    # visualize([pcd], view="front", unlit=True)
+    save_lidar_pano(config, pts, p3[:, 3])          # raw laser intensity
+    # cv2.imshow("Pano from Lidar data", lidar_pano); cv2.waitKey(0)

@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.9] - 2026-10-14
+
+### Fixed
+- **The LiDAR panorama and the vertex colouring used *different* projections.** `*_lidar.jpg` was rendered from the raw merged cloud about the origin, while colouring projected the final cloud (scaled + `Z_OFFSET`) at `Z_ROTATE` — two different projection centres, so the two panoramas were mutually offset (~5°). Both now go through **one shared projection** (`projection_params()` / `project_points()`): `VERTEXCOLOUR.CENTER_M` (origin in the final cloud frame) + `VERTEXCOLOUR.ROTATE_DEG` (euler xyz, deg). `save_lidar_pano()` renders the intensity pano from the final-frame points with it, and colouring projects the cloud with the same centre/rotation.
+
+### Added
+- `VERTEXCOLOUR.CENTER_M` and `VERTEXCOLOUR.ROTATE_DEG` in `config.json` (default origin / zero). These are exactly what `experiments/calibrate_extrinsics.py` solves for (now emitted as `CENTER_M`/`ROTATE_DEG` for direct paste), so the calibration result applies to *both* the pano and the colouring.
+- `lib.pointcloud.save_lidar_pano()`, called from `process_raw`, so every scan gets a consistent intensity panorama.
+
 ## [2.6.8] - 2026-10-14
 
 ### Fixed
