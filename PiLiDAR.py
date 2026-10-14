@@ -182,5 +182,16 @@ if enable_cam:
 
 # 3D PROCESSING
 if config.get("ENABLE_3D"):
-    print("\nProcessing 3D Point Cloud...")
-    pcd = process_raw(config, save=True)
+    # A 360 deg sweep produces ~4 M points; normal estimation + open3d exceed the
+    # Pi's ~4 GB RAM and the process is OOM-killed. The raw container + pano are
+    # already saved, so skip the on-Pi 3D step above a threshold and process on a
+    # desktop instead.
+    total_points = sum(len(c) for c in lidar.cartesian_list) if enable_lidar else 0
+    max_on_pi = config.get("3D", "MAX_POINTS_ON_PI")
+    if on_pi and max_on_pi and total_points > max_on_pi:
+        print(f"\n[3D] {total_points} points exceed MAX_POINTS_ON_PI ({max_on_pi}); "
+              f"skipping on-Pi 3D export.\n     Raw scan + panorama saved — run "
+              f"`pilidar process {config.scan_id}` on a desktop.")
+    else:
+        print("\nProcessing 3D Point Cloud...")
+        pcd = process_raw(config, save=True)

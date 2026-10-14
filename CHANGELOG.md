@@ -3,6 +3,11 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.7] - 2026-10-14
+
+### Fixed
+- **On-Pi 3D processing OOM-killed for large scans.** A 360° sweep (~4.3 M points) exhausted the 4 GB Pi during `process_raw` (normal estimation + open3d). `PiLiDAR.py` now skips the on-Pi 3D export when the point count exceeds `3D.MAX_POINTS_ON_PI` (default 3 000 000) and tells you to run `pilidar process <scan_id>` on a desktop — the raw container + panorama are already saved, so nothing is lost. No-op off the Pi / under the threshold.
+
 ## [2.6.6] - 2026-10-14
 
 ### Added

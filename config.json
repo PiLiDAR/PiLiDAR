@@ -112,7 +112,8 @@
         "NORMAL_RADIUS": 30,
         "SCALE": 0.001, 
         "EXT": "ply",
-        "ASCII": false
+        "ASCII": false,
+        "MAX_POINTS_ON_PI": 3000000
     },
 
     "FILTERING": {
