@@ -5,7 +5,7 @@ from lib.pointcloud import process_raw
 
 if __name__ == "__main__":
 
-    scan_id = "240824-1230"
+    scan_id = "261015-1839"
 
     config = Config()
     config.init(scan_id=scan_id)

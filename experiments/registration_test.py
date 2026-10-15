@@ -48,8 +48,8 @@ if __name__ == "__main__":
     point_size = 1.0
     voxel_size = 0.15  # meter
 
-    pcd_list= [load_pointcloud(str(ROOT / "scans" / "261015-1213" / "261015-1213_half_left.ply")),
-               load_pointcloud(str(ROOT / "scans" / "261015-1213" / "261015-1213_half_right.ply"))]
+    pcd_list= [load_pointcloud(str(ROOT / "scans" / "261015-1839" / "261015-1839_half_left.ply")),
+               load_pointcloud(str(ROOT / "scans" / "261015-1839" / "261015-1839_half_right.ply"))]
 
     source = pcd_list[0]
     target = pcd_list[1]

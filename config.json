@@ -127,7 +127,7 @@
             "POSITION": [
                 0.0,
                 -37.5,
-                41.9
+                -41.9
             ],
             "ROTATION": [
                 -1.0,
@@ -138,8 +138,7 @@
         "NORMAL_RADIUS": 30,
         "SCALE": 0.001,
         "EXT": "ply",
-        "ASCII": false,
-        "MAX_POINTS_ON_PI": 5000000
+        "ASCII": false
     },
     "FILTERING": {
         "FILTER_ON_PI": false,
@@ -149,11 +148,11 @@
     },
     "VERTEXCOLOUR": {
         "SCALE": 0.5,
-        "Z_ROTATE": 0.0,
+        "Z_ROTATE": 5.0,
         "CENTER_M": [
             0.0,
             0.0,
-            0.0
+            0.05
         ],
         "ROTATE_DEG": [
             0.0,
