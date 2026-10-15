@@ -6,19 +6,24 @@ projection can then colourise the point cloud accurately.
 
 The projection used for both the LiDAR panorama and vertex colouring is
 
-    p' = R(yaw, pitch, roll) @ (p - centre)          # centre in cloud units (m)
+    p' = R_euler_xyz(rx, ry, rz) @ (p - centre)       # centre in cloud units (m)
     (theta, phi) = spherical(p')                      # -> equirect (theta, phi)
 
 so the unknowns are the **projection centre** (the effective fisheye nodal point,
-which subsumes the vertical offset) plus yaw/pitch/roll between the LiDAR frame
-and the panorama. These are *projection-time* parameters — they do not touch the
-cloud assembly (`Y_OFFSET`/`LIDAR_OFFSET_ANGLE`), which is a separate geometric
-calibration.
+which subsumes the vertical offset) plus the rotation between the LiDAR/object
+frame and the panorama. For this camera (facing **+Y**, up +Z):
+
+  * **rx** — **pitch** (moves the horizon = a vertical shift)
+  * **ry** — **roll** about the camera's facing axis (rotates the view)
+  * **rz** — **yaw / pan** (horizontal shift)
+
+These are *projection-time* parameters — they do not touch the cloud assembly
+(`Y_OFFSET`/`LIDAR_OFFSET_ANGLE`), which is a separate geometric calibration.
 
 Method: multi-scale edge alignment. Both panoramas are reduced to gradient-
 magnitude maps (they are different modalities — laser intensity vs. RGB — so raw
 pixel correlation is meaningless); the objective is the masked, zero-mean
-normalised cross-correlation of those maps. A coarse grid on (yaw, pitch) seeds a
+normalised cross-correlation of those maps. A coarse grid on (roll, yaw) seeds a
 Nelder-Mead refinement over all six parameters.
 
 Usage (desktop; needs the scan's raw container + colour pano):
@@ -146,7 +151,8 @@ def main():
     ap.add_argument("scan_id")
     ap.add_argument("--mirror", action="store_true",
                     help="the two panoramas turn in opposite directions")
-    ap.add_argument("--out", default=None, help="write an overlay image here")
+    ap.add_argument("--out-dir", default=None,
+                    help="where to write debug images (default: scans/<id>/tmp/)")
     args = ap.parse_args()
 
     cfg = json.load(open(os.path.join(ROOT, "config.json")))
@@ -162,12 +168,12 @@ def main():
     if args.mirror:
         ref_gray = ref_gray[:, ::-1]   # the two panoramas turn in opposite senses
 
-    # --- stage 1: coarse yaw/pitch on a low-res gradient map (fast) ---
+    # --- stage 1: coarse roll/yaw on a low-res gradient map (fast) ---
     CW, CH = WRK_W // 3, WRK_H // 3
     cpts, cI = subsample(pts, intensity, OBJ_POINTS)
     ref_edge_c, ref_valid_c = build_reference(ref_gray, CW, CH)
     cost_c = make_cost(cpts, cI, CW, CH, ref_edge_c, ref_valid_c)
-    print("coarse search over ry(pitch)/rz(yaw) ...")
+    print("coarse search over roll(ry)/yaw(rz) ...")
     best = None
     for ry in np.arange(-20, 20, 5):
         for rz in np.arange(-180, 180, 10):
@@ -187,7 +193,7 @@ def main():
     print(f"\ncost {res.fun:.4f}")
     print(f"  centre (m) : [{cx:.4f}, {cy:.4f}, {cz:.4f}]  "
           f"({cx*1000:.1f}, {cy*1000:.1f}, {cz*1000:.1f} mm)")
-    print(f"  rotate xyz (deg): [{rx:.2f}, {ry:.2f}, {rz:.2f}]")
+    print(f"  rotate xyz (deg) [pitch, roll, yaw]: [{rx:.2f}, {ry:.2f}, {rz:.2f}]")
 
     # --- overlay for visual verification ---
     gray, mask = project_pano(fpts, fI, res.x, WRK_W, WRK_H)
@@ -195,7 +201,9 @@ def main():
     overlay = np.zeros((WRK_H, WRK_W, 3), np.uint8)
     overlay[..., 2] = (ref_valid * (ref_edge > 0.15) * 255).astype(np.uint8)   # red = colour edges
     overlay[..., 1] = ((mask.astype(bool) & (edge > 0.15)) * 255).astype(np.uint8)  # green = lidar edges
-    out = args.out or os.path.join("/tmp", f"extrinsics_overlay_{args.scan_id}.png")
+    out_dir = args.out_dir or os.path.join(scan_dir, "tmp")
+    os.makedirs(out_dir, exist_ok=True)
+    out = os.path.join(out_dir, f"{args.scan_id}_calib_overlay_coarse.png")
     cv2.imwrite(out, overlay)
     print(f"\noverlay (red=colour, green=lidar, yellow=match) -> {out}")
 
@@ -204,8 +212,7 @@ def main():
     # Render at a resolution the points actually FILL (the raw cloud is ~2M points,
     # so 1440x720 is ~2 pts/px). Rendering at the colour pano's 3600x1800 would be
     # ~0.3 pts/px -> a mostly-black, speckly image.
-    img_dir = os.path.join(scan_dir, "extrinsics")
-    os.makedirs(img_dir, exist_ok=True)
+    img_dir = out_dir
 
     def _u8(x):
         x = np.asarray(x, np.float32)
@@ -214,6 +221,8 @@ def main():
 
     save_w, save_h = 1440, 720
     lidar_pano, lidar_mask = project_pano(pts, intensity, res.x, save_w, save_h)
+    # also the ASSEMBLY pano (no calibrated rotation) so the fitted rotation is visible
+    lidar_raw, _ = project_pano(pts, intensity, (0, 0, 0, 0, 0, 0), save_w, save_h)
     # the reference AS USED (already flipped when --mirror), resized to match
     ref_pano = cv2.resize(ref_gray, (save_w, save_h), interpolation=cv2.INTER_AREA)
     lidar_edges = gradient_map(lidar_pano, save_w, save_h)
@@ -227,6 +236,7 @@ def main():
         cv2.imwrite(os.path.join(img_dir, f"{args.scan_id}_calib_{name}.png"), img)
 
     _save("lidar_intensity", lidar_pano)
+    _save("lidar_intensity_raw", lidar_raw)
     _save("colour_gray", ref_pano)
     _save("lidar_edges", _u8(lidar_edges))
     _save("colour_edges", _u8(ref_edges))

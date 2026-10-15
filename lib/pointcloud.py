@@ -382,9 +382,13 @@ def projection_params(config):
     - ``VERTEXCOLOUR.CENTER_M``  = [x, y, z] projection origin in the final cloud
       frame (metres); default the origin.
     - ``VERTEXCOLOUR.ROTATE_DEG`` = [rx, ry, rz] euler (xyz, deg) applied after the
-      centre subtraction; the vertical knob is ``ry`` (pitch). For backward
-      compatibility ``VERTEXCOLOUR.Z_ROTATE`` is used as ``rz`` when
-      ``ROTATE_DEG`` is absent.
+      centre subtraction.
+    - ``VERTEXCOLOUR.Z_ROTATE`` is used as ``rz`` when ``ROTATE_DEG`` is absent.
+
+    Rotation meanings for the camera panorama (camera faces **+Y**, up +Z):
+      * about **X** — **pitch** (moves the horizon = a vertical shift)
+      * about **Y** — **roll** about the camera's facing axis (rotates the view)
+      * about **Z** — **yaw / pan** (horizontal shift)
 
     Returns ``(np.ndarray(3), scipy Rotation)``.
     """
