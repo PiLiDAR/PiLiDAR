@@ -3,6 +3,49 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.18] - 2026-10-15
+
+### Fixed
+- **The scan sweep stopped ~2° short of its target angle.** `max_packages` was `horizontal_steps × packages_per_revolution` (e.g. 1980 × 180), but a full anchor-to-anchor plane actually consumes `OUT_LEN + 1` (~181) packets, so a 360° sweep hit the packet cap at ~358° — leaving a visible ~2.5° wedge with no second-side coverage. `max_packages` is now `(horizontal_steps + 2) × (packages_per_revolution + 2)`, so the safety cap no longer truncates the sweep (the anchor crossing stops it).
+
+## [2.6.17] - 2026-10-15
+
+### Changed
+- **Single LiDAR mounting block (`3D.CALIBRATION`).** `Y_OFFSET` / `Z_OFFSET` / `LIDAR_OFFSET_ANGLE` are replaced by one rigid transform: `POSITION = [x, y, z]` (mm) and `ROTATION = [rx, ry, rz]` (deg, `ry` = disc roll), both in scanner space. `merge_2D_points(..., mount=(position, rotation))` applies it; `process_raw` no longer does a separate Z translate. Behaviour-preserving (verified to 2e-13 mm). No fallbacks.
+
+### Added
+- **`experiments/split_fans.py`** — splits each fan into its two in-plane radial halves → two clouds that should coincide (the 360° parallax), writing `*_half_left.ply` / `*_half_right.ply`. Reports their ICP coincidence.
+
+## [2.6.16] - 2026-10-15
+
+### Added
+- **`experiments/fit_step_scale.py`** — per-step rotation diagnostic: sweeps `angle = SCALE·z + OFFSET` and reports the half-to-half ICP residual of a 360° sweep. Result on `261014-1954`: residual yaw crosses zero at `SCALE = 1.000`, i.e. the per-step rotation scale is correct (not over/under-rotation).
+
+## [2.6.15] - 2026-10-15
+
+### Changed
+- **`LIDAR_OFFSET_ANGLE` moved under `3D`** (with the position offsets) — it is a LiDAR-mount geometric parameter. All readers use `3D.LIDAR_OFFSET_ANGLE` strictly (no fallback).
+
+## [2.6.14] - 2026-10-15
+
+### Fixed
+- **Rotation naming.** With the camera facing +Y: about **X** = pitch (vertical shift), about **Y** = roll (the camera facing axis, rotates the view), about **Z** = yaw/pan. The calibrator's `ry` is the **roll** (was mislabeled pitch). Debug images now write to `scans/<id>/tmp/`, and it saves both the fitted and the raw (assembly) LiDAR panoramas.
+
+## [2.6.13] - 2026-10-14
+
+### Added
+- **README "Coordinate space" section** — object space, the camera/LiDAR back-to-back mount, the LiDAR mount DOF, and the panorama as the angular reference.
+
+## [2.6.12] - 2026-10-14
+
+### Fixed
+- **Object-frame axes corrected** (the previous README/doc had a contradiction): **+Z** up (rotation axis), **+Y** forward (the camera look direction), **X** left/right. The LiDAR faces −Y and its disc lies in the X–Z plane with roll about Y.
+
+## [2.6.11] - 2026-10-14
+
+### Fixed
+- **LiDAR `Z_OFFSET` sign.** It is the LiDAR's height **above** the camera, so it must be **positive** (+41.9): a feature at lidar-height `z` is at camera-height `z + h`, which *adds*. The old −41.9 flipped the vertical. (A vertical shift doesn't change the floor's tilt, so leveling never flagged it.) Also clarified the object-space axes and the LiDAR mount DOF in `docs/imu_leveling.md`.
+
 ## [2.6.10] - 2026-10-14
 
 ### Added
