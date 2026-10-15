@@ -55,14 +55,13 @@ def main():
     scan_id = sys.argv[1] if len(sys.argv) > 1 else "261011-2156"
     cfg = json.load(open(os.path.join(ROOT, "config.json")))
     mounting = np.asarray(cfg["IMU"]["MOUNTING"], dtype=float)
-    y_offset = cfg["3D"]["Y_OFFSET"]
-    ang_offset = cfg["3D"]["LIDAR_OFFSET_ANGLE"]
+    pos, rot = cfg["3D"]["CALIBRATION"]["POSITION"], cfg["3D"]["CALIBRATION"]["ROTATION"]
 
     path = os.path.join(ROOT, "scans", scan_id, f"{scan_id}_lidar.pkl")
     raw = load_raw_scan(path)
     print(f"scan {scan_id}: {len(raw['cartesian'])} slices from pickle")
 
-    cloud = merge_2D_points(raw, position_offset=(0, y_offset, 0), angle_offset=ang_offset)
+    cloud = merge_2D_points(raw, mount=(pos, rot))
     print(f"assembled cloud: {cloud.shape[0]} points (device space, mm)")
 
     n_raw, inl, cand = floor_normal(cloud)

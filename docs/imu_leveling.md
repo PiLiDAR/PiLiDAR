@@ -38,14 +38,14 @@ panorama are built here; gravity leveling is a separate, later step.
   plane. As the turntable turns, the disc (and its normal) revolve about +Z.
 - `merge_2D_points()` builds the cloud by inserting `Y=0` into each 2D fan and
   revolving it about `up_vector=(0,0,1)` by the negative stepper angle.
-- The LiDAR mount (`"3D"` in config):
-  - `Y_OFFSET` — position along the mount/forward axis; **−37.5 mm** (the LiDAR
-    faces −Y, so it sits on the −Y side).
-  - `Z_OFFSET` — the LiDAR's **height relative to the camera**; **+41.9 mm**
-    because it sits **above** the camera. Applied as a vertical translation of the
-    assembled cloud.
-  - `3D.LIDAR_OFFSET_ANGLE` — disc **roll** (rotation about Y).
-  - The LiDAR's **offset within the disc plane** (the X direction) is assumed 0.
+- The LiDAR mount (`3D.CALIBRATION` in config) is one rigid transform in scanner
+  space:
+  - `POSITION` = `[x, y, z]` mm — the LiDAR origin (X = in-disc/left-right, **Y =
+    forward/mount axis** (the LiDAR's −Y side, so -37.5), **Z = height above the
+    camera** (+41.9)).
+  - `ROTATION` = `[rx, ry, rz]` degrees — the mount rotation; the **roll about Y**
+    (`ry = -1.05`) spins the upright disc in its own plane.
+  - X and the other rotations are assumed 0.
 - So **by construction the cloud's up is +Z**; a *level* rig then produces a
   cloud whose floor is horizontal.
 

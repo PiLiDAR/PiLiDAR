@@ -184,12 +184,15 @@ def convert_raw_scan(pkl_path, force=False):
     save_raw_scan(pkl_path, raw)
     return True
 
-def lidar_offset_angle(config):
-    """The LiDAR disc **roll** (deg) — the mount's only rotation offset.
+def lidar_mount(config):
+    """The LiDAR mount ``(position, rotation)`` in scanner space.
 
-    Lives under ``3D`` alongside the position offsets.
+    ``position`` = LiDAR origin (mm) in the scanner frame (X left/right, Y forward,
+    Z up); ``rotation`` = mount euler (xyz, deg) — the roll about Y (the disc
+    normal) is the middle component.
     """
-    return config.get("3D", "LIDAR_OFFSET_ANGLE")
+    cal = config.get("3D", "CALIBRATION")
+    return tuple(cal["POSITION"]), tuple(cal["ROTATION"])
 
 
 def process_raw(config, save=True):
@@ -202,8 +205,8 @@ def process_raw(config, save=True):
         return cartesian_list
 
     def postprocess_3D(config, pcd, save=True, imu_up=None):
-        # move Z offset and scale pointcloud
-        pcd = transform(pcd, translate=(0, 0, config.get("3D","Z_OFFSET")))                 # Z offset in mm
+        # scale pointcloud (mm -> m); the LiDAR mount offsets are already applied
+        # during assembly (see merge_2D_points / lidar_mount)
         scene_scale = config.get("3D","SCALE")                                              # mm -> 0.001 m
         if scene_scale !=1:
             pcd = transform(pcd, scale=scene_scale)
@@ -266,8 +269,7 @@ def process_raw(config, save=True):
                   f"reference gravity in cloud frame = {np.round(imu_up, 3).tolist()}")
 
         array_3D = merge_2D_points(raw_scan,
-                        position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm
-                        angle_offset=lidar_offset_angle(config),                 # disc roll fix
+                        mount=lidar_mount(config),                               # LiDAR position + roll
                         up_vector=(0,0,1))
 
 
@@ -286,8 +288,7 @@ def process_raw(config, save=True):
             save_raw_scan(config.raw_path, raw_scan)
 
         array_3D = merge_2D_points(raw_scan,
-                                position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm
-                                angle_offset=lidar_offset_angle(config),                 # disc roll fix
+                                mount=lidar_mount(config),                       # LiDAR position + roll
                                 up_vector=(0,0,1))
     else:
         raise FileNotFoundError(f"Neither {config.raw_path} nor {config.lidar_dir} found.")
@@ -300,11 +301,7 @@ def process_raw(config, save=True):
     # LiDAR intensity panorama — rendered from the FINAL-frame points with the same
     # projection the colouring uses, so it lines up with the colour panorama.
     if save:
-        normal_radius = config.get("3D", "NORMAL_RADIUS")
-        final_points = transform(pcd, translate=(0, 0, config.get("3D", "Z_OFFSET")))
-        scene_scale = config.get("3D", "SCALE")
-        if scene_scale != 1:
-            final_points = transform(final_points, scale=scene_scale)
+        final_points = transform(pcd, scale=config.get("3D", "SCALE"))
         save_lidar_pano(config, np.asarray(final_points.points), array_3D[:, 3])
 
     pcd = postprocess_3D(config, pcd, save=save, imu_up=imu_up)
@@ -604,17 +601,33 @@ def estimate_point_normals(pcd, radius=1, max_nn=30, center=(0,0,0)):
     pcd.orient_normals_towards_camera_location(camera_location=center)
     return pcd
 
-def merge_2D_points(raw_scan, z_step=1, ccw=False, position_offset=(0,0,0), angle_offset=0, up_vector=(0,0,1)):
+def merge_2D_points(raw_scan, z_step=1, ccw=False, mount=None,
+                    position_offset=(0, 0, 0), angle_offset=0, up_vector=(0, 0, 1)):
+    """Assemble the 3D cloud from the per-plane 2D fans.
+
+    The scanner's object frame has **+Z = up (rotation axis)**, **+Y = forward**
+    (the camera look direction) and X = left/right. Each fan is a vertical plane
+    whose normal is ±Y; the LiDAR is mounted on the mount axis (Y) at a position
+    offset, rolled about Y by ``rotation[1]``.
+
+    ``mount`` is ``(position, rotation)`` in scanner space: the LiDAR origin
+    (mm) and its mount rotation (euler xyz, deg). Defaults use ``position_offset``
+    (a pure Y translation) and ``angle_offset`` (a roll about Y) for callers that
+    pass the raw values.
+    """
     z_angles = raw_scan["z_angles"]
     cartesian_list = raw_scan["cartesian"]
+
+    if mount is not None:
+        position_offset, angle_offset = mount
 
     # accumulate 3D slices in a list for fast single concatenation
     pointcloud_chunks = []
     z_angle = 0
 
     for i, points2d in enumerate(cartesian_list):
-        # insert 3D Y=0 after column 0 so 2D-Y becomes 3D-Z (stand the fan upright
-        # about X: its 2D length becomes the 3D height; the plane lies in X-Z, normal Y)
+        # 2D (x, y) -> 3D (x, 0, y): the 2D length (y) becomes the height (Z),
+        # standing the fan upright about X; the plane lies in X-Z, its normal is Y.
         points3d = np.insert(points2d, 1, values=0, axis=1)
 
         # Use the corresponding angle from the list if provided, otherwise use the fixed angle increment
@@ -626,8 +639,8 @@ def merge_2D_points(raw_scan, z_step=1, ccw=False, position_offset=(0,0,0), angl
             else:
                 z_angle += z_step
 
-        # rotational offset around Lidar axis (probably mechanical assembly imperfection)
-        points3d = rotate_3D(points3d, angle_offset, rotation_axis=np.array((0,1,0)))
+        # LiDAR mount rotation (about Y = the disc roll/plane normal), then position
+        points3d = rotate_3D(points3d, angle_offset, rotation_axis=np.array((0, 1, 0)))
 
         # revolve around the Z-axis (up_vector) by its angle from filename
         points3d = rotate_3D(points3d, -z_angle, translation_vector=position_offset, rotation_axis=np.array(up_vector))
@@ -860,12 +873,9 @@ if __name__ == "__main__":
     config.init(scan_id=scan_id)
 
     raw_scan = load_raw_scan(config.raw_path)
-    p3 = merge_2D_points(raw_scan,
-                         position_offset=(0, config.get("3D", "Y_OFFSET"), 0),
-                         angle_offset=lidar_offset_angle(config))
-    # final frame (mm -> m, Z_OFFSET) so the centre matches the colouring frame
+    p3 = merge_2D_points(raw_scan, mount=lidar_mount(config))
+    # final frame (mm -> m); the mount offsets are already in the assembly
     pts = p3[:, :3].astype(float) * config.get("3D", "SCALE")
-    pts[:, 2] += config.get("3D", "Z_OFFSET") * config.get("3D", "SCALE")
 
     save_lidar_pano(config, pts, p3[:, 3])          # raw laser intensity
     # cv2.imshow("Pano from Lidar data", lidar_pano); cv2.waitKey(0)

@@ -106,9 +106,10 @@
     },
 
     "3D": {
-        "Y_OFFSET": -37.5,
-        "Z_OFFSET": 41.9,
-        "LIDAR_OFFSET_ANGLE": -1.05,
+        "CALIBRATION": {
+            "POSITION": [0.0, -37.5, 41.9],
+            "ROTATION": [0.0, -1.05, 0.0]
+        },
         "NORMAL_RADIUS": 30,
         "SCALE": 0.001, 
         "EXT": "ply",

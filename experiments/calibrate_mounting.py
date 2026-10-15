@@ -39,7 +39,7 @@ import numpy as np  # noqa: E402
 import open3d as o3d  # noqa: E402
 
 from lib.imu_orientation import (  # noqa: E402
-    fit_turntable_axis, imu_up_vector, leveling_rotation, reference_gravity, solve_mounting,
+    fit_turntable_axis, leveling_rotation, reference_gravity, solve_mounting,
 )
 from lib.pointcloud import load_raw_scan, merge_2D_points  # noqa: E402
 
@@ -82,8 +82,8 @@ def main():
     quats = np.asarray(raw["quaternions"], float)
     z_angles = np.asarray(raw["z_angles"], float)
 
-    cloud = merge_2D_points(raw, position_offset=(0, cfg["3D"]["Y_OFFSET"], 0),
-                            angle_offset=cfg["3D"]["LIDAR_OFFSET_ANGLE"])
+    cloud = merge_2D_points(raw, mount=(cfg["3D"]["CALIBRATION"]["POSITION"],
+                                        cfg["3D"]["CALIBRATION"]["ROTATION"]))
     n_floor, inl, cand = floor_normal(cloud)
 
     fit = fit_turntable_axis(quats)

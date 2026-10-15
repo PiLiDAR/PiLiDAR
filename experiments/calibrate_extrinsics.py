@@ -56,15 +56,12 @@ OBJ_POINTS = 1_200_000    # enough points to fill WRK_W x WRK_H densely
 
 
 def load_points(cfg, raw):
-    """Assemble the cloud in the same frame the exporter uses (m, Z_OFFSET applied)."""
-    y_offset = cfg["3D"]["Y_OFFSET"]
-    z_offset = cfg["3D"]["Z_OFFSET"]
+    """Assemble the cloud in the same frame the exporter uses (m, mount applied)."""
+    pos, rot = cfg["3D"]["CALIBRATION"]["POSITION"], cfg["3D"]["CALIBRATION"]["ROTATION"]
     scale = cfg["3D"]["SCALE"]
-    ang_offset = cfg["3D"]["LIDAR_OFFSET_ANGLE"]
 
-    p3 = merge_2D_points(raw, position_offset=(0, y_offset, 0), angle_offset=ang_offset)
+    p3 = merge_2D_points(raw, mount=(pos, rot))
     pts = p3[:, :3].astype(np.float64) * scale
-    pts[:, 2] += z_offset * scale
     return pts, p3[:, 3]
 
 

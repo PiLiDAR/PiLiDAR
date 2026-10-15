@@ -41,10 +41,11 @@ later step (see [docs/imu_leveling.md](docs/imu_leveling.md)).
   its vertical disc lies in the **X–Z plane**; the disc **roll** axis is **Y**.
   As the turntable turns, the disc revolves about +Z and the point cloud is built
   by revolving each fan about `(0,0,1)`.
-- **LiDAR mount** (`"3D"` / `"LIDAR"` in `config.json`): `Y_OFFSET` = position on
-  the forward axis (the LiDAR's −Y side), `Z_OFFSET` = LiDAR **height above** the
-  camera (positive), `LIDAR_OFFSET_ANGLE` = disc roll. The offset within the disc
-  plane (X) is assumed 0.
+- **LiDAR mount** (`3D.CALIBRATION` in `config.json`): `POSITION` = [x, y, z] mm in
+  scanner space (Y = forward/mount axis, Z = height above the camera); `ROTATION`
+  = [rx, ry, rz] degrees — the **roll about Y** (`ry`) rotates the upright disc in
+  its own plane. The offset within the disc plane (X) and the other rotations are
+  assumed 0.
 - The camera's **panorama** is the angular reference: cloud → equirect uses
   `VERTEXCOLOUR.CENTER_M` + `ROTATE_DEG` (see `lib.pointcloud.projection_params`),
   the same projection used for the LiDAR intensity panorama and for vertex colors.
@@ -124,6 +125,12 @@ rsync -az --delete --info=progress2 pi@192.168.1.16:/home/pi/PiLiDAR/scans/ scan
 
 (`-a` preserves times/permissions, `-z` compresses, `--info=progress2` shows
 overall progress. The scan files are world-readable, so no `sudo` is needed.)
+
+## Calibrate extrinsics
+
+```python
+experiments/calibrate_extrinsics.py 261014-1954
+```
 
 ## Documentation
 

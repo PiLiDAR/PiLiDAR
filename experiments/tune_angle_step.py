@@ -47,8 +47,9 @@ def assemble_local(raw, cfg):
     the revolve angle changes when SCALE/OFFSET change. Vectorised (no per-plane
     open3d objects) so a rebuild is fast enough for interactive tuning.
     """
-    ox, oy, oz = 0.0, cfg["3D"]["Y_OFFSET"], 0.0
-    ao = np.radians(cfg["3D"]["LIDAR_OFFSET_ANGLE"])
+    pos = cfg["3D"]["CALIBRATION"]["POSITION"]
+    ox, oy, oz = pos[0], pos[1], pos[2]
+    ao = np.radians(cfg["3D"]["CALIBRATION"]["ROTATION"][1])
     ca, sa = np.cos(ao), np.sin(ao)
 
     chunks, idx = [], []
