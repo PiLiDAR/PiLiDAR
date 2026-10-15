@@ -56,7 +56,7 @@ def main():
     cfg = json.load(open(os.path.join(ROOT, "config.json")))
     mounting = np.asarray(cfg["IMU"]["MOUNTING"], dtype=float)
     y_offset = cfg["3D"]["Y_OFFSET"]
-    ang_offset = cfg["LIDAR"]["LIDAR_OFFSET_ANGLE"]
+    ang_offset = cfg["3D"]["LIDAR_OFFSET_ANGLE"]
 
     path = os.path.join(ROOT, "scans", scan_id, f"{scan_id}_lidar.pkl")
     raw = load_raw_scan(path)

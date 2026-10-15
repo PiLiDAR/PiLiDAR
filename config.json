@@ -49,7 +49,6 @@
             "PWM_CHANNEL": 0,
             "PWM_FREQ": 30000
         },
-        "LIDAR_OFFSET_ANGLE": -1.05,
         "TARGET_RES": "1/6",
         "TARGET_SPEED": 10,
         "RAW_NAME": "_lidar.pkl",
@@ -109,6 +108,7 @@
     "3D": {
         "Y_OFFSET": -37.5,
         "Z_OFFSET": 41.9,
+        "LIDAR_OFFSET_ANGLE": -1.05,
         "NORMAL_RADIUS": 30,
         "SCALE": 0.001, 
         "EXT": "ply",

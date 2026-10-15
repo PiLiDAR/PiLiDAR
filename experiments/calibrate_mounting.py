@@ -83,7 +83,7 @@ def main():
     z_angles = np.asarray(raw["z_angles"], float)
 
     cloud = merge_2D_points(raw, position_offset=(0, cfg["3D"]["Y_OFFSET"], 0),
-                            angle_offset=cfg["LIDAR"]["LIDAR_OFFSET_ANGLE"])
+                            angle_offset=cfg["3D"]["LIDAR_OFFSET_ANGLE"])
     n_floor, inl, cand = floor_normal(cloud)
 
     fit = fit_turntable_axis(quats)

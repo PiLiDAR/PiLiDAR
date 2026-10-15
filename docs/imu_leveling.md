@@ -44,7 +44,7 @@ panorama are built here; gravity leveling is a separate, later step.
   - `Z_OFFSET` — the LiDAR's **height relative to the camera**; **+41.9 mm**
     because it sits **above** the camera. Applied as a vertical translation of the
     assembled cloud.
-  - `LIDAR.LIDAR_OFFSET_ANGLE` — disc **roll** (rotation about Y).
+  - `3D.LIDAR_OFFSET_ANGLE` — disc **roll** (rotation about Y).
   - The LiDAR's **offset within the disc plane** (the X direction) is assumed 0.
 - So **by construction the cloud's up is +Z**; a *level* rig then produces a
   cloud whose floor is horizontal.

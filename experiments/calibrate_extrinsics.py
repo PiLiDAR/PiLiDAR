@@ -60,7 +60,7 @@ def load_points(cfg, raw):
     y_offset = cfg["3D"]["Y_OFFSET"]
     z_offset = cfg["3D"]["Z_OFFSET"]
     scale = cfg["3D"]["SCALE"]
-    ang_offset = cfg["LIDAR"]["LIDAR_OFFSET_ANGLE"]
+    ang_offset = cfg["3D"]["LIDAR_OFFSET_ANGLE"]
 
     p3 = merge_2D_points(raw, position_offset=(0, y_offset, 0), angle_offset=ang_offset)
     pts = p3[:, :3].astype(np.float64) * scale

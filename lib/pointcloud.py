@@ -184,6 +184,14 @@ def convert_raw_scan(pkl_path, force=False):
     save_raw_scan(pkl_path, raw)
     return True
 
+def lidar_offset_angle(config):
+    """The LiDAR disc **roll** (deg) — the mount's only rotation offset.
+
+    Lives under ``3D`` alongside the position offsets.
+    """
+    return config.get("3D", "LIDAR_OFFSET_ANGLE")
+
+
 def process_raw(config, save=True):
 
     def get_cartesian_list(filepaths, columns="XZI", csv_delimiter=","):
@@ -259,7 +267,7 @@ def process_raw(config, save=True):
 
         array_3D = merge_2D_points(raw_scan,
                         position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm
-                        angle_offset=config.get("LIDAR","LIDAR_OFFSET_ANGLE"),   # small lidar rotation fix
+                        angle_offset=lidar_offset_angle(config),                 # disc roll fix
                         up_vector=(0,0,1))
 
 
@@ -279,7 +287,7 @@ def process_raw(config, save=True):
 
         array_3D = merge_2D_points(raw_scan,
                                 position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm
-                                angle_offset=config.get("LIDAR","LIDAR_OFFSET_ANGLE"),   # small lidar rotation fix
+                                angle_offset=lidar_offset_angle(config),                 # disc roll fix
                                 up_vector=(0,0,1))
     else:
         raise FileNotFoundError(f"Neither {config.raw_path} nor {config.lidar_dir} found.")
@@ -854,7 +862,7 @@ if __name__ == "__main__":
     raw_scan = load_raw_scan(config.raw_path)
     p3 = merge_2D_points(raw_scan,
                          position_offset=(0, config.get("3D", "Y_OFFSET"), 0),
-                         angle_offset=config.get("LIDAR", "LIDAR_OFFSET_ANGLE"))
+                         angle_offset=lidar_offset_angle(config))
     # final frame (mm -> m, Z_OFFSET) so the centre matches the colouring frame
     pts = p3[:, :3].astype(float) * config.get("3D", "SCALE")
     pts[:, 2] += config.get("3D", "Z_OFFSET") * config.get("3D", "SCALE")

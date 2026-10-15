@@ -48,7 +48,7 @@ def assemble_local(raw, cfg):
     open3d objects) so a rebuild is fast enough for interactive tuning.
     """
     ox, oy, oz = 0.0, cfg["3D"]["Y_OFFSET"], 0.0
-    ao = np.radians(cfg["LIDAR"]["LIDAR_OFFSET_ANGLE"])
+    ao = np.radians(cfg["3D"]["LIDAR_OFFSET_ANGLE"])
     ca, sa = np.cos(ao), np.sin(ao)
 
     chunks, idx = [], []
