@@ -298,11 +298,12 @@ def process_raw(config, save=True):
     pcd = pcd_from_np(array_3D, estimate_normals=True, max_nn=50, radius=normal_radius)
     print("\n2D->3D merge completed.")
 
-    # LiDAR intensity panorama — rendered from the FINAL-frame points with the same
-    # projection the colouring uses, so it lines up with the colour panorama.
+    # LiDAR intensity panorama(s) — the two fan halves (each sees every surface
+    # from its own side, so rendering them together shows spurious brightness
+    # steps) + the merged legacy view, sharing the colouring projection so they
+    # line up with the stitched colour panorama.
     if save:
-        final_points = transform(pcd, scale=config.get("3D", "SCALE"))
-        save_lidar_pano(config, np.asarray(final_points.points), array_3D[:, 3])
+        save_lidar_pano(config, raw_scan)
 
     pcd = postprocess_3D(config, pcd, save=save, imu_up=imu_up)
     print("\nprocessing 3D completed.")
@@ -409,19 +410,56 @@ def project_points(points, center, rotation):
     return rotation.apply(np.asarray(points, dtype=float) - center)
 
 
-def save_lidar_pano(config, points, intensity, width=2048, height=1024):
-    """Save `<scan_id>_lidar.jpg`: a LiDAR **intensity** panorama.
+def _split_raw_half(raw_scan, positive):
+    """Filter a raw scan to the ``x >= 0`` (right) or ``x < 0`` (left) fan half.
 
-    Renders the *final-frame* cloud points (same frame the colouring uses) with
-    the shared projection (:func:`projection_params`), so it lines up with the
-    stitched colour panorama instead of being a different projection. Must be fed
-    the RAW laser intensity (not the coloured cloud).
+    The in-plane radial coordinate ``x`` lives only in the raw 2D fan; after the
+    revolve it is mixed into the world horizontal, so the split must be done here
+    (before assembly), not on the final cloud.
     """
+    fans = []
+    for fan in raw_scan["cartesian"]:
+        f = np.asarray(fan)
+        c = f[:, 0]
+        fans.append(f[c >= 0] if positive else f[c < 0])
+    return {"z_angles": raw_scan["z_angles"], "cartesian": fans}
+
+
+def save_lidar_pano(config, raw_scan, width=2048, height=1024, legacy=True):
+    """Save the LiDAR **intensity** panorama(s) for a raw scan.
+
+    A sweep wider than 180° sees every surface through **both** in-plane radial
+    halves of the fan, so the data holds **two** 360° panoramas at a small
+    parallax offset. Rendered together they show spurious brightness steps where
+    one half stands closer to the surface than the other, so the halves are
+    written **separately** by default:
+
+    * ``<scan_id>_lidar_left.jpg`` / ``_lidar_right.jpg`` — the two fan halves
+    * ``<scan_id>_lidar.jpg`` — the merged view (kept for compatibility)
+
+    Each half is assembled on its own (the split is by the sign of the raw
+    in-plane radial coordinate, which the revolve would otherwise blur) and
+    projected with the shared :func:`projection_params`, so the result lines up
+    with the stitched colour panorama. Fed the RAW laser intensity.
+    """
+    mount = lidar_mount(config)
+    scale = config.get("3D", "SCALE")
     center, rotation = projection_params(config)
-    pano = render_lidar_pano(project_points(points, center, rotation), intensity,
-                             width, height, center=(0, 0, 0))
-    cv2.imwrite(os.path.join(config.scan_dir, f"{config.scan_id}_lidar.jpg"), pano)
-    return pano
+    out = {}
+    for name, positive in (("left", False), ("right", True)):
+        p3 = merge_2D_points(_split_raw_half(raw_scan, positive), mount=mount)
+        pts = np.asarray(p3[:, :3], dtype=float) * scale
+        out[name] = render_lidar_pano(project_points(pts, center, rotation),
+                                      p3[:, 3], width, height, center=(0, 0, 0))
+        cv2.imwrite(os.path.join(config.scan_dir, f"{config.scan_id}_lidar_{name}.jpg"), out[name])
+
+    p3 = merge_2D_points(raw_scan, mount=mount)
+    pts = np.asarray(p3[:, :3], dtype=float) * scale
+    out["merged"] = render_lidar_pano(project_points(pts, center, rotation),
+                                      p3[:, 3], width, height, center=(0, 0, 0))
+    if legacy:
+        cv2.imwrite(os.path.join(config.scan_dir, f"{config.scan_id}_lidar.jpg"), out["merged"])
+    return out
 
 
 def get_lidar_pano(pcd, image_width, image_height, intensity=None, center=(0, 0, 0), z_rotate=0):
@@ -873,8 +911,9 @@ def angular_lookup(angular_points, pano, scale=1, degrees=False, z_rotate=0, as_
 
 if __name__ == "__main__":
     '''
-    regenerate a LiDAR intensity panorama (`<scan_id>_lidar.jpg`) from the raw scan,
-    using the SAME projection as the vertex colouring (see `save_lidar_pano`).
+    regenerate LiDAR intensity panoramas (`<scan_id>_lidar_left.jpg` /
+    `_lidar_right.jpg` for the two fan halves + the merged `<scan_id>_lidar.jpg`)
+    from the raw scan, using the SAME projection as the vertex colouring.
     '''
 
     from config import Config
@@ -885,9 +924,6 @@ if __name__ == "__main__":
     config.init(scan_id=scan_id)
 
     raw_scan = load_raw_scan(config.raw_path)
-    p3 = merge_2D_points(raw_scan, mount=lidar_mount(config))
-    # final frame (mm -> m); the mount offsets are already in the assembly
-    pts = p3[:, :3].astype(float) * config.get("3D", "SCALE")
-
-    save_lidar_pano(config, pts, p3[:, 3])          # raw laser intensity
+    # fan-frame mm; the mount offsets and projection are applied inside
+    save_lidar_pano(config, raw_scan)               # raw laser intensity
     # cv2.imshow("Pano from Lidar data", lidar_pano); cv2.waitKey(0)

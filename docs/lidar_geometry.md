@@ -26,6 +26,12 @@ Consequences of the 90° mount (all verified against the code):
   **coincide**. Any residual between them is a mount/geometry error — this is the
   basis of `experiments/split_fans.py`.
 
+Because each half sweeps a full 360°, a sweep wider than 180° effectively
+contains **two overlapping panoramas** of the scene. They are rendered
+**separately** — `<scan_id>_lidar_left.jpg` / `_lidar_right.jpg` (plus the merged
+legacy `<scan_id>_lidar.jpg`) — because mixing them shows spurious brightness
+steps wherever one half stands closer to the surface than the other.
+
 ## The measurement
 
 `experiments/split_fans.py <scan_id>` assembles the halves and runs ICP:

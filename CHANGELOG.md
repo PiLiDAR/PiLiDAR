@@ -3,6 +3,11 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.24] - 2026-10-15
+
+### Changed
+- **LiDAR intensity panoramas are now split into the two fan halves by default.** A sweep wider than 180° sees every surface through **both** in-plane radial halves of the fan, so the raw data holds **two** 360° panoramas at a small parallax offset — mixing them produced spurious brightness steps where one half stood closer to the surface than the other. `save_lidar_pano()` now assembles and renders each half on its own and writes `<scan_id>_lidar_left.jpg` and `<scan_id>_lidar_right.jpg` (plus the merged `<scan_id>_lidar.jpg` for compatibility). The split is by the sign of the raw **in-plane radial** coordinate (done before the revolve, which would otherwise blur it into the world horizontal), and each half is projected with the shared `projection_params` so it still lines up with the colour panorama. `save_lidar_pano(config, raw_scan)` now takes the **raw scan** (it assembles the halves internally).
+
 ## [2.6.23] - 2026-10-15
 
 ### Fixed
