@@ -33,7 +33,8 @@ def run_registration(source, target, voxel_size=0.15, fast_gr=False, p2l_icp=Tru
         visualize([source, target], transformation=reg_icp.transformation,
                 point_colors="uniform", view=view, point_size=point_size)
 
-    return reg_gr.transformation
+    # return the FINE (ICP) transform — the global one is only its seed
+    return reg_icp.transformation
 
 
 def get_bounding_box_size(pcd):
@@ -47,13 +48,11 @@ if __name__ == "__main__":
     point_size = 1.0
     voxel_size = 0.15  # meter
 
-    pcd_list= [load_pointcloud(str(ROOT / "scans" / "240928-0912" / "240928-0912.ply")),
-               load_pointcloud(str(ROOT / "scans" / "240928-0922" / "240928-0922.ply")),
-               load_pointcloud(str(ROOT / "scans" / "240928-0944" / "240928-0944.ply")),
-               load_pointcloud(str(ROOT / "scans" / "240928-0948" / "240928-0948.ply"))]
+    pcd_list= [load_pointcloud(str(ROOT / "scans" / "261015-1213" / "261015-1213_half_left.ply")),
+               load_pointcloud(str(ROOT / "scans" / "261015-1213" / "261015-1213_half_right.ply"))]
 
-    source = pcd_list[1]
-    target = pcd_list[2]
+    source = pcd_list[0]
+    target = pcd_list[1]
 
     # # bounding box size
     print(f"Bounding box: {get_bounding_box_size(source)}")
