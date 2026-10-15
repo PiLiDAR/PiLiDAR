@@ -65,7 +65,9 @@ def global_registration(source, target, voxel_size, fast=False, normals_nn=30, f
 def icp(source, target, transform, voxel_size, p2l=True, p2p_max_iteration=2000):
     dist_thres = voxel_size * 0.4
 
-    if p2l:  # point-to-plane ICP
+    if p2l:  # point-to-plane ICP (needs target normals)
+        if not target.has_normals():
+            target = estimate_point_normals(target, radius=voxel_size * 2, max_nn=30)
         method = o3d.pipelines.registration.TransformationEstimationPointToPlane()
         reg_icp = o3d.pipelines.registration.registration_icp(source, target, dist_thres, transform, method)
 
