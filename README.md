@@ -140,6 +140,7 @@ experiments/calibrate_extrinsics.py 261014-1954
 | Bill of materials, wiring, LiDAR specs, 3D printing | [docs/hardware.md](docs/hardware.md) |
 | Serial protocol, visualization, USB scan dumping | [docs/protocol.md](docs/protocol.md) |
 | IMU gravity leveling (frames, method, accuracy) | [docs/imu_leveling.md](docs/imu_leveling.md) |
+| LiDAR geometry (the open left/right fan-half offset) | [docs/lidar_geometry.md](docs/lidar_geometry.md) |
 | Troubleshooting & references | [docs/troubleshooting.md](docs/troubleshooting.md) |
 | Project roadmap (phases 0–6) | [docs/roadmap.md](docs/roadmap.md) |
 | Change history | [CHANGELOG.md](CHANGELOG.md) |

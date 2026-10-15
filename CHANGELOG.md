@@ -3,6 +3,43 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.23] - 2026-10-15
+
+### Fixed
+- **The LiDAR mount rotation silently dropped its pitch (x) and yaw (z).** `merge_2D_points` fed `angle_offset` to `rotate_3D` as a **3-vector**, but that helper only ever builds an axis-angle about **Y**, so `3D.CALIBRATION.ROTATION[0]` (pitch) and `[2]` (yaw) were ignored — a LiDAR unit sitting off-square could not be described at all, and a pitch sweep produced byte-identical clouds. The full euler-xyz mount orientation is now applied (`R.from_euler("xyz", ...)`); a scalar still means the older roll-only convention.
+- **Applied the measured mount pitch.** The door frames came out **diagonal** in the 360° intensity panorama (opposite lean in the two fan halves). Sweeping the mount x and scoring wall verticality (length-weighted Hough segments) puts both halves' optimum at the **same** value — a genuine world-frame tilt, not a relative error — so `3D.CALIBRATION.ROTATION[0]` is now `-1.0` (was `0.0`).
+
+### Added
+- **`experiments/split_pano.py`** — renders the two fan-half **panoramas** (left/right, stacked + edge overlay) and reports their best azimuth shift, globally and per elevation band.
+- **`experiments/rectify_tilt.py`** — sweeps the mount pitch/roll, renders the intensity panorama and scores wall **verticality** (length-weighted Hough line orientation), to find the tilt that squares the walls (with `--render-only` to just dump the panoramas).
+- `experiments/split_fans.py` now reports the **full** left↔right relative transform (rotation axis + angle, translation) and the per-range-band translation, so a parallax/mount error can be told apart from a relative rotation.
+
+### Removed
+- **`experiments/split_overlap.py`** (the >360° arc-overlap check). The fan-half split (`split_fans.py`) is the correct diagnostic for the sweep geometry — the arc split was not needed.
+
+### Notes
+- The left↔right fan halves still show a **systematic ≈2.3° relative yaw about Z** (stable across scans: 2.05–2.51°). It is not parallax (constant, not distance-proportional), not pitch/roll, and **not** fixable via `3D.CALIBRATION.ROTATION` — a z rotation rotates the *whole* cloud (measured: relative yaw unchanged), and x moves it only ~0.1°/degree. It is an intrinsic fan-half geometry term and remains open.
+
+## [2.6.22] - 2026-10-15
+
+### Added
+- **`experiments/fit_lidar_scale.py`** — sweeps the LiDAR **beam-angle scale** and the **range scale** from the left/right fan halves and reports the residual-vs-distance slope (the distance-proportional half-half residual).
+
+## [2.6.21] - 2026-10-15
+
+### Fixed
+- **`experiments/registration_test.py` returned the coarse transform.** `run_registration()` computed the fine ICP but returned `reg_gr.transformation` (the RANSAC seed), so the overlay showed only the coarse alignment. It now returns `reg_icp.transformation`. (Example data switched to the half-split clouds.)
+
+## [2.6.20] - 2026-10-15
+
+### Fixed
+- **Point-to-plane ICP required target normals it might not have.** `icp()` used `TransformationEstimationPointToPlane` when `p2l=True` without checking the target; a cloud without normals degraded the solve. It now estimates the target normals on demand (radius `2 × voxel`, `max_nn=30`).
+
+## [2.6.19] - 2026-10-15
+
+### Added
+- **`experiments/fit_mount.py`** — sweeps the LiDAR mount (`3D.CALIBRATION`) position/rotation and reports the left↔right fan-half ICP residual (rmse, relative yaw, relative shift), to fit the mount from the coincidence of the two halves.
+
 ## [2.6.18] - 2026-10-15
 
 ### Fixed

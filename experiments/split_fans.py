@@ -86,11 +86,35 @@ def main():
         b, a, 0.2, np.eye(4),
         o3d.pipelines.registration.TransformationEstimationPointToPoint())
     T = reg.transformation
-    yaw = np.degrees(np.arctan2(T[1, 0], T[0, 0]))
-    print(f"\nleft vs right ICP: fitness={reg.fitness:.3f} rmse={reg.inlier_rmse*1000:.1f}mm "
-          f"residual shift=({T[0,3]*1000:+.1f},{T[1,3]*1000:+.1f},{T[2,3]*1000:+.1f})mm "
-          f"yaw={yaw:+.2f}deg")
-    print("(rmse ~ noise + mount error; a large shift/double-wall = mount offset wrong)")
+    Rm, t = T[:3, :3], T[:3, 3] * 1000.0
+    angle = np.degrees(np.arccos(np.clip((np.trace(Rm) - 1) / 2, -1, 1)))
+    w, v = np.linalg.eig(Rm)
+    axis = np.real(v[:, np.argmin(np.abs(w - 1))])
+    axis = axis / (np.linalg.norm(axis) + 1e-12)
+    print(f"\nleft vs right ICP: fitness={reg.fitness:.3f} rmse={reg.inlier_rmse*1000:.1f}mm")
+    print(f"  rotation {angle:.2f} deg about axis=({axis[0]:+.2f},{axis[1]:+.2f},{axis[2]:+.2f})"
+          f"  translation=({t[0]:+.1f},{t[1]:+.1f},{t[2]:+.1f})mm")
+    print("  axis ~ Z & translation ~ 0 => halves coincide (mount ok + negligible parallax);")
+    print("  a residual relative rotation is a LiDAR geometry/mount error between the halves.")
+
+    # per-range-band translation: does the offset grow with distance (parallax / mount position)?
+    print("\n  range band -> relative translation (mm):")
+    dl = np.hypot(np.asarray(clouds["left"].points)[:, 0], np.asarray(clouds["left"].points)[:, 1])
+    dr = np.hypot(np.asarray(clouds["right"].points)[:, 0], np.asarray(clouds["right"].points)[:, 1])
+    Lp, Rp = np.asarray(clouds["left"].points), np.asarray(clouds["right"].points)
+    for lo, hi in ((0, 2), (2, 4), (4, 8), (8, 16)):
+        ml, mr = (dl >= lo) & (dl < hi), (dr >= lo) & (dr < hi)
+        if ml.sum() < 100 or mr.sum() < 100:
+            continue
+        pa = o3d.geometry.PointCloud(); pa.points = o3d.utility.Vector3dVector(Lp[ml])
+        pb = o3d.geometry.PointCloud(); pb.points = o3d.utility.Vector3dVector(Rp[mr])
+        pa = pa.voxel_down_sample(0.02); pb = pb.voxel_down_sample(0.02)
+        r = o3d.pipelines.registration.registration_icp(
+            pb, pa, 0.2, np.eye(4),
+            o3d.pipelines.registration.TransformationEstimationPointToPoint())
+        tt = r.transformation[:3, 3] * 1000.0
+        print(f"    {lo:2d}..{hi:2d}m: ({tt[0]:+6.1f},{tt[1]:+6.1f},{tt[2]:+6.1f})mm "
+              f"(fitness {r.fitness:.2f})")
 
 
 if __name__ == "__main__":

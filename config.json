@@ -73,7 +73,7 @@
         "SCAN_ANGLE": 360,
         "GEAR_RATIO": "1 + 38/14",
         "MICROSTEPS": 16,
-        "STEP_DELAY": 0.001,
+        "STEP_DELAY": 0.0005,
         "SCAN_DELAY": 0.08,
         "STEPPER_RES": 200,
         "STEP_ANGLE": null
@@ -130,7 +130,7 @@
                 41.9
             ],
             "ROTATION": [
-                0.0,
+                -1.0,
                 -1.05,
                 0.0
             ]
@@ -139,7 +139,7 @@
         "SCALE": 0.001,
         "EXT": "ply",
         "ASCII": false,
-        "MAX_POINTS_ON_PI": 3000000
+        "MAX_POINTS_ON_PI": 5000000
     },
     "FILTERING": {
         "FILTER_ON_PI": false,

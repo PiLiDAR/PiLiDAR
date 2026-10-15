@@ -621,6 +621,15 @@ def merge_2D_points(raw_scan, z_step=1, ccw=False, mount=None,
     if mount is not None:
         position_offset, angle_offset = mount
 
+    # Mount orientation about the LiDAR origin. A scalar keeps the older
+    # convention (roll about Y = the disc normal); a 3-vector is a full euler-xyz
+    # rotation (deg), so a LiDAR unit that sits off-square (pitch, roll AND yaw)
+    # can be described in scanner space.
+    if np.ndim(angle_offset) == 0:
+        mount_rotation = R.from_rotvec(np.radians(float(angle_offset)) * np.array([0.0, 1.0, 0.0]))
+    else:
+        mount_rotation = R.from_euler("xyz", angle_offset, degrees=True)
+
     # accumulate 3D slices in a list for fast single concatenation
     pointcloud_chunks = []
     z_angle = 0
@@ -639,8 +648,11 @@ def merge_2D_points(raw_scan, z_step=1, ccw=False, mount=None,
             else:
                 z_angle += z_step
 
-        # LiDAR mount rotation (about Y = the disc roll/plane normal), then position
-        points3d = rotate_3D(points3d, angle_offset, rotation_axis=np.array((0, 1, 0)))
+        # LiDAR mount orientation (pitch/roll/yaw about the LiDAR origin)
+        if points3d.shape[1] == 4:
+            points3d = np.column_stack((mount_rotation.apply(points3d[:, :3]), points3d[:, 3]))
+        else:
+            points3d = mount_rotation.apply(points3d[:, :3])
 
         # revolve around the Z-axis (up_vector) by its angle from filename
         points3d = rotate_3D(points3d, -z_angle, translation_vector=position_offset, rotation_axis=np.array(up_vector))
