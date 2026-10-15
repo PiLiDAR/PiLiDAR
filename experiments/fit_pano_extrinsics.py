@@ -62,7 +62,7 @@ def mutual_info(a, b, bins=32):
     pa = pab.reshape(bins, bins).sum(1)
     pb = pab.reshape(bins, bins).sum(0)
     nz = pab > 0
-    return float(np.sum(pab[nz] * np.log2(pab[nz] / (pa.repeat(bins)[nz] * pb.tile(bins)[nz]))))
+    return float(np.sum(pab[nz] * np.log2(pab[nz] / (pa.repeat(bins)[nz] * np.tile(pb, bins)[nz]))))
 
 
 def search(rgb, lidar, base, ranges, step, W, H):

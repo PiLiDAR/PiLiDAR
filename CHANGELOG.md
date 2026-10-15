@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **LiDAR intensity panoramas are now split into the two fan halves by default.** A sweep wider than 180° sees every surface through **both** in-plane radial halves of the fan, so the raw data holds **two** 360° panoramas at a small parallax offset — mixing them produced spurious brightness steps where one half stood closer to the surface than the other. `save_lidar_pano()` now assembles and renders each half on its own and writes `<scan_id>_lidar_left.jpg` and `<scan_id>_lidar_right.jpg` (plus the merged `<scan_id>_lidar.jpg` for compatibility). The split is by the sign of the raw **in-plane radial** coordinate (done before the revolve, which would otherwise blur it into the world horizontal), and each half is projected with the shared `projection_params` so it still lines up with the colour panorama. `save_lidar_pano(config, raw_scan)` now takes the **raw scan** (it assembles the halves internally).
 
+## [2.6.24] - 2026-10-15
+
+### Added
+- **`experiments/pick_pano_points.py`** — solve the RGB↔LiDAR sphere rotation from **hand-picked point pairs**. Cross-modal auto-matching (SIFT/NCC/MI) is unreliable between the RGB panorama and the raw-intensity LiDAR panorama, so this takes user-picked correspondences (interactive cv2 window, or `--pairs file` as `x_rgb y_rgb x_lidar y_lidar`) and solves the 3-DOF rotation (2 pairs = minimum, 3+ = least squares). Both panoramas share one equirect pixel→direction convention, so the result is directly `VERTEXCOLOUR.ROTATE_DEG`. Verified to recover a known rotation bit-exactly.
+- **`experiments/pano_picker.py`** — a headless HTML picker (works where a cv2 GUI cannot, e.g. WSL): click the pairs in a browser, paste the coordinates back.
+- **`experiments/render_cloud.py`** — offscreen (headless) coloured point-cloud render with `--max-range` cropping, for inspecting texture alignment.
+
+### Fixed
+- **`experiments/fit_pano_extrinsics.py`**: `pb.tile(bins)` → `np.tile(pb, bins)` (the MI normaliser was calling `numpy.ndarray.tile`, which does not exist).
+
+### Notes
+- **`VERTEXCOLOUR.CENTER_M`/`ROTATE_DEG` are redundant with `3D.CALIBRATION`.** `project_points` applies only `CENTER_M`; the mount is already baked into the cloud by `merge_2D_points`. So a `CENTER_M` of `−c` is byte-identical to a `POSITION` of `+c` (same for `ROTATE_DEG` vs `ROTATION`). With the current mount the measured RGB↔LiDAR rotation is ≈ identity (two independent 5-pair sets: horizontal ≈0°, vertical ≈ −0.5°, no trend with elevation) — i.e. the offsets are **not needed**, they are a correction for a wrong mount.
+- The residual RGB↔LiDAR disagreement concentrates on **near surfaces** (floor, cushion) at degrees and vanishes on far ones (wall/ceiling edge) at ~0.5°, which is the **parallax** of the ~40 mm nodal-point separation — not fixable by any rotation or centre.
+
 ## [2.6.23] - 2026-10-15
 
 ### Fixed
