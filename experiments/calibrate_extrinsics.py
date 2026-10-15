@@ -79,9 +79,9 @@ def gradient_map(gray, w, h):
 def project_pano(pts, intensity, params, w, h, valid_only=True):
     """Render the LiDAR intensity panorama under the current projection params.
 
-    ``params`` = (cx, cy, cz, rx, ry, rz): centre (m) + euler xyz (deg) — the SAME
-    convention as ``VERTEXCOLOUR.CENTER_M`` / ``ROTATE_DEG`` in config, so the
-    result drops straight in.
+    ``params`` = (cx, cy, cz, rx, ry, rz): centre (m) + euler xyz (deg). The centre
+    is computed in metres here (the cloud is meter-scaled); the emitted config
+    snippet converts it to ``VERTEXCOLOUR.CENTER_MM`` (mm) + ``ROTATE_DEG``.
     Returns (gray_uint8, valid_mask).
     """
     cx, cy, cz, rx, ry, rz = params
@@ -244,10 +244,10 @@ def main():
     _save("stack", stack)
     print(f"saved input images (lidar/colour + edges + overlay) -> {img_dir}/")
 
-    params = {"CENTER_M": [round(cx, 5), round(cy, 5), round(cz, 5)],
+    params = {"CENTER_MM": [round(cx * 1000, 3), round(cy * 1000, 3), round(cz * 1000, 3)],
               "ROTATE_DEG": [round(rx, 3), round(ry, 3), round(rz, 3)],
               "mirror": bool(args.mirror), "cost": float(res.fun)}
-    print("\nconfig snippet:\n" + json.dumps({"VERTEXCOLOUR": {"PROJECTION": params}}, indent=2))
+    print("\nconfig snippet:\n" + json.dumps({"VERTEXCOLOUR": params}, indent=2))
 
 
 if __name__ == "__main__":

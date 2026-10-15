@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np  # noqa: E402
 import open3d as o3d  # noqa: E402
+from scipy.spatial.transform import Rotation as R  # noqa: E402
 
 from lib.pointcloud import merge_2D_points, load_raw_scan  # noqa: E402
 from lib.imu_orientation import (  # noqa: E402
@@ -54,7 +55,7 @@ def tilt_deg(normal):
 def main():
     scan_id = sys.argv[1] if len(sys.argv) > 1 else "261011-2156"
     cfg = json.load(open(os.path.join(ROOT, "config.json")))
-    mounting = np.asarray(cfg["IMU"]["MOUNTING"], dtype=float)
+    mounting = R.from_euler("xyz", cfg["IMU"]["MOUNTING"], degrees=True).as_matrix()
     pos, rot = cfg["3D"]["CALIBRATION"]["POSITION"], cfg["3D"]["CALIBRATION"]["ROTATION"]
 
     path = os.path.join(ROOT, "scans", scan_id, f"{scan_id}_lidar.pkl")

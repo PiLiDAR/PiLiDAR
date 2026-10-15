@@ -268,9 +268,12 @@ def process_raw(config, save=True):
             print(f"\nIMU: {len(raw_scan['quaternions'])} samples; "
                   f"reference gravity in cloud frame = {np.round(imu_up, 3).tolist()}")
 
-        array_3D = merge_2D_points(raw_scan,
-                        mount=lidar_mount(config),                               # LiDAR position + roll
-                        up_vector=(0,0,1))
+        # assemble the 3D cloud. When FAN_SPLIT is enabled this splits each fan
+        # into its left/right radial halves and applies the stored half offset so
+        # the two halves coincide (removes the "double walls" artifact); otherwise
+        # it is the legacy full-fan merge. See lib/fan_split.py.
+        from lib.fan_split import assemble_aligned
+        array_3D = assemble_aligned(config, raw_scan)
 
 
     elif os.path.exists(config.lidar_dir):
@@ -287,9 +290,10 @@ def process_raw(config, save=True):
         if save:
             save_raw_scan(config.raw_path, raw_scan)
 
-        array_3D = merge_2D_points(raw_scan,
-                                mount=lidar_mount(config),                       # LiDAR position + roll
-                                up_vector=(0,0,1))
+        # fan-split-aware assembly (see lib/fan_split.py); falls back to the
+        # legacy full-fan merge when FAN_SPLIT is disabled or no offset is stored.
+        from lib.fan_split import assemble_aligned
+        array_3D = assemble_aligned(config, raw_scan)
     else:
         raise FileNotFoundError(f"Neither {config.raw_path} nor {config.lidar_dir} found.")
 
@@ -385,11 +389,13 @@ def projection_params(config):
     ONE place defines the projection used by both the LiDAR intensity panorama
     (calibration) and the vertex colouring, so they can never disagree.
 
-    - ``VERTEXCOLOUR.CENTER_M``  = [x, y, z] projection origin in the final cloud
-      frame (metres); default the origin.
+    - ``VERTEXCOLOUR.CENTER_MM`` = [x, y, z] projection origin in the final cloud
+      frame (**millimetres**, the same unit as ``3D.CALIBRATION.POSITION``); default
+      the origin. Converted to metres internally (the projection runs on the
+      meter-scaled cloud).
     - ``VERTEXCOLOUR.ROTATE_DEG`` = [rx, ry, rz] euler (xyz, deg) applied after the
-      centre subtraction.
-    - ``VERTEXCOLOUR.Z_ROTATE`` is used as ``rz`` when ``ROTATE_DEG`` is absent.
+      centre subtraction. This is the single rotation knob (the legacy yaw-only
+      ``Z_ROTATE`` was folded into ``ROTATE_DEG[2]`` and removed).
 
     Rotation meanings for the camera panorama (camera faces **+Y**, up +Z):
       * about **X** — **pitch** (moves the horizon = a vertical shift)
@@ -398,10 +404,10 @@ def projection_params(config):
 
     Returns ``(np.ndarray(3), scipy Rotation)``.
     """
-    center = np.asarray(config.get("VERTEXCOLOUR", "CENTER_M") or [0.0, 0.0, 0.0], dtype=float)
-    rotate = config.get("VERTEXCOLOUR", "ROTATE_DEG")
-    if rotate is None:
-        rotate = [0.0, 0.0, float(config.get("VERTEXCOLOUR", "Z_ROTATE") or 0.0)]
+    scale = config.get("3D", "SCALE")  # mm -> m
+    center_mm = np.asarray(config.get("VERTEXCOLOUR", "CENTER_MM") or [0.0, 0.0, 0.0], dtype=float)
+    center = center_mm * scale  # mm -> m (projection runs on the meter-scaled cloud)
+    rotate = config.get("VERTEXCOLOUR", "ROTATE_DEG") or [0.0, 0.0, 0.0]
     return center, R.from_euler("xyz", rotate, degrees=True)
 
 

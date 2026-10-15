@@ -20,9 +20,9 @@ Procedure per scan:
   - assemble the cloud and measure its floor normal (RANSAC),
   - solve the mounting (``solve_mounting``) and report the residuals.
 
-To *calibrate*: run on a tilted scan, take the printed matrix into config.json,
-then run again on other scans (ideally one level) and confirm the residual floor
-tilt after leveling stays small.
+To *calibrate*: run on a tilted scan, take the printed euler angles into
+config.json (``IMU.MOUNTING``), then run again on other scans (ideally one
+level) and confirm the residual floor tilt after leveling stays small.
 
 Run:
     ~/venv/bin/python experiments/calibrate_mounting.py 261011-2031
@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np  # noqa: E402
 import open3d as o3d  # noqa: E402
+from scipy.spatial.transform import Rotation as R  # noqa: E402
 
 from lib.imu_orientation import (  # noqa: E402
     fit_turntable_axis, leveling_rotation, reference_gravity, solve_mounting,
@@ -103,13 +104,13 @@ def main():
           f"tilt={_angle(n_floor, Z):.2f} deg  ({inl}/{cand} inliers)")
 
     if args.use_config:
-        M = np.asarray(cfg["IMU"]["MOUNTING"], float)
+        M = R.from_euler("xyz", cfg["IMU"]["MOUNTING"], degrees=True).as_matrix()
         print("\n[--use-config] evaluating config IMU.MOUNTING:")
     else:
         M = solve_mounting(axis, g_ref, gravity_cloud=n_floor)
+        euler = R.from_matrix(M).as_euler("xyz", degrees=True)
         print("\nSOLVED MOUNTING (paste into config.json -> IMU.MOUNTING):")
-        for row in M:
-            print("        [" + ", ".join(f"{v: .4f}" for v in row) + "],")
+        print(f"        {np.round(euler, 6).tolist()}")
 
     up = M @ g_ref
     rot = leveling_rotation(up).as_matrix()

@@ -321,14 +321,13 @@ def leveling_rotation(up_vector):
 def mounting_matrix(config):
     """IMU -> cloud mounting rotation (3x3) from ``IMU.MOUNTING`` (config.json).
 
-    There is deliberately no fallback: the mounting is calibration data and must
-    be present in the config for leveling to run.
+    ``IMU.MOUNTING`` is stored as euler angles (xyz, degrees) — human-readable —
+    and converted to a 3x3 matrix here. There is deliberately no fallback: the
+    mounting is calibration data and must be present in the config for leveling
+    to run.
     """
-    try:
-        return np.asarray(config.get("IMU", "MOUNTING"), dtype=float)
-    except KeyError:
-        raise KeyError("config IMU.MOUNTING is required for IMU leveling "
-                       "(see docs/imu_leveling.md)")
+    euler = np.asarray(config.get("IMU", "MOUNTING"), dtype=float)
+    return R.from_euler("xyz", euler, degrees=True).as_matrix()
 
 
 def cloud_up_vector(quaternions, mounting, scale=16384.0):

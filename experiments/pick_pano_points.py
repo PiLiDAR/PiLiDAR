@@ -8,7 +8,7 @@ Both panoramas are 2:1 equirectangular and image the same scene from the same
 nodal point, so the mapping between them is (to first order) a pure **rotation of
 the sphere** -- the relative orientation of the LiDAR (cloud) frame and the camera
 (RGB) frame. That rotation is exactly what `VERTEXCOLOUR.ROTATE_DEG` implements,
-and with a perfect mount + no parallax it should be identity (and `CENTER_M`
+and with a perfect mount + no parallax it should be identity (and `CENTER_MM`
 zero), so this doubles as an independent check of `3D.CALIBRATION`.
 
 How many pairs?
@@ -183,7 +183,7 @@ def main():
     print(f"  per-pair residual (deg): {np.round(ang, 2).tolist()}")
     print(f"  rms residual:            {ang.std():.2f} deg (max {ang.max():.2f})")
     print(f"\n  ROTATE_DEG (euler xyz) = [{e[0]:.3f}, {e[1]:.3f}, {e[2]:.3f}]")
-    print(f"  (identity => mount already aligned; CENTER_M would then be ~0)")
+    print(f"  (identity => mount already aligned; CENTER_MM would then be ~0)")
 
     # annotated overlay for a sanity check (resize the LiDAR pane to the RGB pane)
     lw = rgb.shape[1]

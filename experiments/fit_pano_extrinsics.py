@@ -10,7 +10,7 @@ statistical dependence, not a linear intensity relationship.
 Search = coarse->fine over (yaw, pitch, roll), each candidate warping the LiDAR
 panorama on the sphere and scored by MI against the RGB panorama. The resulting
 rotation is exactly what `VERTEXCOLOUR.ROTATE_DEG` implements; with a perfect
-mount and no parallax it should be identity (and `CENTER_M` zero), so this doubles
+mount and no parallax it should be identity (and `CENTER_MM` zero), so this doubles
 as an independent check of `3D.CALIBRATION`.
 
     ~/venv/bin/python experiments/fit_pano_extrinsics.py 261015-1839

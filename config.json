@@ -98,21 +98,9 @@
         "frequency": 50,
         "LEVEL": true,
         "MOUNTING": [
-            [
-                -0.9964,
-                -0.0025,
-                -0.0845
-            ],
-            [
-                -0.0842,
-                -0.0617,
-                0.9945
-            ],
-            [
-                -0.0078,
-                0.9981,
-                0.0613
-            ]
+            86.486315,
+            0.4440539,
+            -175.1701171
         ]
     },
     "PANO": {
@@ -140,6 +128,20 @@
         "EXT": "ply",
         "ASCII": false
     },
+    "FAN_SPLIT": {
+        "ENABLE": true,
+        "AXIS": "x",
+        "TRANSLATION": [
+            -0.001967,
+            -0.002989,
+            0.0105784
+        ],
+        "ROTATE_DEG": [
+            0.11088,
+            -0.0773,
+            -2.3440
+        ]
+    },
     "FILTERING": {
         "FILTER_ON_PI": false,
         "VOXEL_SIZE": 0.05,
@@ -148,11 +150,10 @@
     },
     "VERTEXCOLOUR": {
         "SCALE": 0.5,
-        "Z_ROTATE": 5.0,
-        "CENTER_M": [
+        "CENTER_MM": [
             0.0,
             0.0,
-            0.05
+            50.0
         ],
         "ROTATE_DEG": [
             0.0,

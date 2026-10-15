@@ -126,12 +126,12 @@ turntable axis  (body, fit_turntable_axis().c_body_accel)  ->  [0,0,1]       (cl
 reference gravity (body, reference_gravity)                ->  floor normal  (measured)
 ```
 
-with `scipy.spatial.transform.Rotation.align_vectors`. Current value:
+with `scipy.spatial.transform.Rotation.align_vectors`. It is stored in
+`config.json` as **euler angles (xyz, degrees)** — human-readable — and converted
+to a 3x3 matrix by `mounting_matrix()`. Current value:
 
 ```
-[[-0.9964, -0.0025, -0.0845],
- [-0.0842, -0.0617,  0.9945],
- [-0.0078,  0.9981,  0.0613]]
+[86.486315, 0.444054, -175.170117]
 ```
 
 Two things matter here:

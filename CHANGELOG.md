@@ -3,12 +3,37 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.25] - 2026-10-15
+
+### Added
+- **`lib/fan_split.py`** — production home of the fan-half split: `split_fans()`,
+  `assemble_aligned()` (drop-in for `merge_2D_points` in `process_raw`), and
+  `measure_offset()` (one-time ICP between the two halves, CLI:
+  `python -m lib.fan_split <scan_id>`). The stored right→left offset corrects the
+  intrinsic ~2.4° relative yaw between the in-plane radial halves
+  (see `docs/lidar_geometry.md`), so `process_raw` no longer mixes both halves
+  into "double walls".
+
+### Changed
+- **`process_raw`** now assembles via `assemble_aligned()`: with
+  `FAN_SPLIT.ENABLE` true the two halves are aligned with the stored offset
+  (translation in metres + euler-xyz degrees, the same convention
+  `experiments/registration_test.py` reports). A missing offset raises — there is
+  no silent fallback to the legacy full-fan merge.
+- **`FAN_SPLIT` config format**: the 4x4 `OFFSET` matrix + `META` (fitness, rmse,
+  …) are replaced by `TRANSLATION` (metres) + `ROTATE_DEG` (euler xyz, degrees).
+  config.json is calibration data, not a log file.
+- **`IMU.MOUNTING` config format**: the 3x3 rotation matrix is replaced by euler
+  angles (xyz, degrees) — human-readable. `mounting_matrix()` converts to a
+  matrix; `experiments/calibrate_mounting.py` prints euler for pasting.
+- **`VERTEXCOLOUR.CENTER_M` → `CENTER_MM`**: unified with `3D.CALIBRATION.POSITION`
+  (millimetres); `projection_params()` converts via `3D.SCALE`. The dead
+  `VERTEXCOLOUR.Z_ROTATE` knob is removed (`ROTATE_DEG` covers it).
+
 ## [2.6.24] - 2026-10-15
 
 ### Changed
 - **LiDAR intensity panoramas are now split into the two fan halves by default.** A sweep wider than 180° sees every surface through **both** in-plane radial halves of the fan, so the raw data holds **two** 360° panoramas at a small parallax offset — mixing them produced spurious brightness steps where one half stood closer to the surface than the other. `save_lidar_pano()` now assembles and renders each half on its own and writes `<scan_id>_lidar_left.jpg` and `<scan_id>_lidar_right.jpg` (plus the merged `<scan_id>_lidar.jpg` for compatibility). The split is by the sign of the raw **in-plane radial** coordinate (done before the revolve, which would otherwise blur it into the world horizontal), and each half is projected with the shared `projection_params` so it still lines up with the colour panorama. `save_lidar_pano(config, raw_scan)` now takes the **raw scan** (it assembles the halves internally).
-
-## [2.6.24] - 2026-10-15
 
 ### Added
 - **`experiments/pick_pano_points.py`** — solve the RGB↔LiDAR sphere rotation from **hand-picked point pairs**. Cross-modal auto-matching (SIFT/NCC/MI) is unreliable between the RGB panorama and the raw-intensity LiDAR panorama, so this takes user-picked correspondences (interactive cv2 window, or `--pairs file` as `x_rgb y_rgb x_lidar y_lidar`) and solves the 3-DOF rotation (2 pairs = minimum, 3+ = least squares). Both panoramas share one equirect pixel→direction convention, so the result is directly `VERTEXCOLOUR.ROTATE_DEG`. Verified to recover a known rotation bit-exactly.
