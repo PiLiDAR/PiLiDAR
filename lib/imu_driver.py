@@ -13,6 +13,39 @@ _QUAT_NORM = 16384.0           # unit quaternion in DMP int16 units
 _NORM_TOL = 0.10               # accept +-10% of the unit norm
 
 
+class _ThrottledBus:
+    """Thin proxy around ``smbus.SMBus`` that adds a small inter-transaction gap.
+
+    The Pi 4's ``brcmstb-i2c`` driver runs in *polling* mode at ~97.5 kHz.
+    The DMP firmware upload hammers it with ~10 000 back-to-back byte
+    transactions, and the polling loop occasionally drops one (EIO / EREMOTEIO).
+    A 50 µs busy-wait after each write lets the driver catch up without adding
+    more than ~0.5 s to the one-time init.
+    """
+
+    def __init__(self, bus, delay_s=50e-6):
+        self._bus = bus
+        self._delay = delay_s
+
+    def write_byte_data(self, dev, reg, data):
+        self._bus.write_byte_data(dev, reg, data)
+        end = time.perf_counter() + self._delay
+        while time.perf_counter() < end:
+            pass
+
+    def read_byte_data(self, dev, reg):
+        return self._bus.read_byte_data(dev, reg)
+
+    def read_i2c_block_data(self, dev, reg, n):
+        return self._bus.read_i2c_block_data(dev, reg, n)
+
+    def write_i2c_block_data(self, dev, reg, data):
+        self._bus.write_i2c_block_data(dev, reg, data)
+
+    def __getattr__(self, name):
+        return getattr(self._bus, name)
+
+
 class MPU6050Wrapper:
     def __init__(self, i2c_bus=3, device_address=0x68, freq=50, retries=10, retry_delay=0.25):
         self.i2c_bus = i2c_bus
@@ -20,13 +53,20 @@ class MPU6050Wrapper:
         self.freq_divider = int(200 / freq)  # 0x04
 
         # The DMP firmware upload intermittently fails with an I2C EIO/EREMOTEIO
-        # even though the chip answers at its address (observed on the Pi). A
-        # single glitch would otherwise silently disable the IMU + leveling for
-        # the whole scan, so retry a few times before giving up.
+        # even though the chip answers at its address (observed on the Pi). The
+        # brcmstb-i2c polling driver drops transactions under burst load, so we
+        # swap the library's internal bus for a throttled proxy that adds a small
+        # inter-transaction gap. A single glitch would otherwise silently disable
+        # the IMU + leveling for the whole scan, so retry a few times before
+        # giving up.
         last_error = None
         for _ in range(max(1, retries)):
             try:
                 self.mpu = MPU6050(self.i2c_bus, self.device_address, self.freq_divider)
+                # Replace the library's internal bus with a throttled proxy so
+                # the ~10 000 DMP-upload transactions don't overwhelm the
+                # brcmstb-i2c polling driver.
+                self.mpu._MPU6050__bus = _ThrottledBus(smbus.SMBus(self.i2c_bus))
                 self.mpu.dmp_initialize()
                 self.mpu.set_DMP_enabled(True)
                 break
