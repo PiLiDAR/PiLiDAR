@@ -205,7 +205,10 @@ class Config:
         self.h_res = 360 * self.steps / self.microsteps_per_revolution                          # 0.1817°
         self.horizontal_steps = int(self.SCAN_ANGLE / self.h_res)                               # 990
         self.packages_per_revolution = round(self.SAMPLING_RATE / (12 * self.TARGET_SPEED))     # 180
-        self.max_packages = self.horizontal_steps * self.packages_per_revolution                # 178200
+        # Each anchor-to-anchor plane spans OUT_LEN+1 packets (anchor crossing to the
+        # next), so budget one extra packet per plane (+ a small margin) — otherwise a
+        # 360 deg sweep stops ~2 deg short ("angular gap").
+        self.max_packages = (self.horizontal_steps + 2) * (self.packages_per_revolution + 2)
 
 
     def evaluate_formula(self, formula: str):
